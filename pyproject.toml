@@ -1,0 +1,36 @@
+[project]
+name = "IAV_Classification"
+version = "0.0.1"
+description = "Add your description here"
+authors = [
+    { name = "Dennis Lukas", email = "dennis.lukas@helmholtz-hzi.de" }
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipywidgets>=8.1.7",
+    "keras>=3.9.2",
+    "librosa>=0.11.0",
+    "matplotlib>=3.10.3",
+    "mlflow>=3.2.0",
+    "notebook>=7.4.4",
+    "openpyxl>=3.1.5",
+    "pydot>=4.0.1",
+    "seaborn>=0.13.2",
+    "tensorflow>=2.19.0",
+    "tqdm>=4.67.1",
+    "tsaug>=0.2.1",
+    "tslearn>=0.6.3",
+    "typer>=0.16.0",
+    "xgboost>=3.0.2",
+]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ['IAV_Classification']
+
+[project.scripts]
+app = "IAV_Classification.main:app"
+create-test-set = "IAV_Classification.data:app"
