@@ -67,15 +67,15 @@ def train_fold(fold: int,
             print(f'Fold {fold} has only one class in the validation set! {num_x31_val}', file=sys.stderr)
             return fold
 
-        # TODO this is a hack to get the batch size to increase with the fold number
+        # this is a hack to get the batch size to increase with the fold number
         batch_size = [2 ** i for i in range(3, 20)][fold]
         mlflow.log_param('fold_batch_size', batch_size)
         model = make_model(datasplit.x_train.shape[1:])
 
-        # # TODO this is another hack to space out a parameter along the folds
+        # this is another hack to space out a parameter along the folds
         #mcd = float(np.linspace(.1, .9, n_folds)[fold])
         #mlflow.log_param('mcd', mcd)
-        #model = make_model(datasplit.x_train.shape[1:], mcd=mcd) # TODO: pass mcd here if you want to use it, but modify the make_model function accordingly
+        #model = make_model(datasplit.x_train.shape[1:], mcd=mcd) pass mcd here if you want to use it, but modify the make_model function accordingly
 
         try:
             history = fit(model=model,
@@ -143,5 +143,3 @@ def cross_validate(
                     print(f'Fold {fold} finished')
         except KeyboardInterrupt:
             executor.shutdown(wait=True, cancel_futures=True)
-
-    # TODO evaluate
