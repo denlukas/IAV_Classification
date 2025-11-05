@@ -19,7 +19,7 @@ cd IAV_Classification
 # change into IAV_Classification directory
 uv sync
 # install the dependencies
-source .venv/bin/activate 
+source .\.venv\Scripts\Activate.ps1 
 #activate the environment
 ```
 
@@ -73,7 +73,7 @@ If the dataset is balanced a default threshold of 0.5 is great, but if the new d
 ### How to train and evaluate new models
 To train new models an example is provided below based on the all_traces.tsv dataset. 
 ```bash
-#Step 1: Create train and test set
+# Step 1: Create train and test set
 uv run app create-test-set all_traces_norm_imputation_without_background.tsv --seed 132 --fold 4
 # or if you dont want to use augmentation
 uv run app create-test-set all_traces_norm_imputation_without_background.tsv --seed 132 --fold 4 --no-augment
