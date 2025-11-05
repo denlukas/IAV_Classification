@@ -6,8 +6,6 @@ dist/
 wheels/
 *.egg-info
 
-# Data folder
-data/
 
 # Virtual environments
 .venv
