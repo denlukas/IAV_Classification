@@ -15,3 +15,6 @@ wheels/
 mlartifacts/
 mlmodels/
 mlruns/
+
+# exclude Püntener datasets
+Püntener_Classification/data/
