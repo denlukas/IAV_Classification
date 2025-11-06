@@ -13,14 +13,16 @@ Description (ca. 4 Zeilen)
 Please install [uv](https://docs.astral.sh/uv/getting-started/features/) if you want to use this code.
 It uses [typer](https://typer.tiangolo.com/) as a command line interface and [MLflow](https://mlflow.org/docs/latest/ml/tracking/quickstart/) for tracking the experiments.
 ```bash
-git clone https://github.com/denlukas/IAV_Classification.git
 # clone the Git Repository
-cd IAV_Classification
+git clone https://github.com/denlukas/IAV_Classification.git
 # change into IAV_Classification directory
-uv sync
+cd IAV_Classification
 # install the dependencies
-source .\.venv\Scripts\Activate.ps1 
+uv sync
 #activate the environment
+source .\.venv\Scripts\Activate.ps1
+# or
+. .\.venv\Scripts\Activate.ps1 
 ```
 
 ## Getting started
