@@ -40,7 +40,7 @@ First, open the terminal on the left side of the menu (1).
 To start the MLflow server it is advised to open another terminal. For this, just click on the "+" and rename the terminal as u wish (2).  
 Now you can execute the following command:  
 ```bash
-mlflow server --host 127.0.0.1 --port 5001 --serve-artifacts
+mlflow server --host 127.0.0.1 --port 8080 --serve-artifacts
 ```
 Click on the link that is provided and you will be forwarded to the MLflow Webinterface (3).  
 
