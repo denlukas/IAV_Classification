@@ -26,13 +26,7 @@ source .\.venv\Scripts\Activate.ps1
 ```
 
 ## Getting started
-
-### Notebooks
-![Notebook.png](images/Notebook.png)
-To carry out the preprocessing steps open the notebooks folder and double click on the notebook (1).
-The next step is to run the cells, which will get executed by clicking on `Run Section` (2).
-The notebooks will automatically create output folders such as `Exploring_Dataset` (3).
-Each notebook will have an individual overview of how to use the notebook, what inputs are needed and what outputs are generated.
+How to do the preprocessing steps
 
 ### How to start MLflow
 ![MLflow.png](images/MLflow.png)
