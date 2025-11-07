@@ -18,9 +18,9 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
     # Feel free to change anything between here and `model = keras.Model(inputs, outputs)`!
 
     # We want to extract local patterns from sequential data, therefore we use convolutions.
-    # This layer scans the sequence with 64 pattern detectors (=filters) of width 3, moving
+    # This layer scans the sequence with a specific number of pattern detectors (=filters) of width 3, moving
     # 2 steps at a time. ReLU keeps only positive activations to add non-linearity.
-    x = Conv1D(124, kernel_size=3, strides=2, activation='relu')(inputs)
+    x = Conv1D(128, kernel_size=3, strides=2, activation='relu')(inputs)
 
     # This layer normalizes activations to have stable mean and variance. It helps speed up
     # training and reduce overfitting.
@@ -35,19 +35,19 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
     x = MCDropout(mcd)(x)
 
     # These two, we already know from above.
-    x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(x)
+    x = Conv1D(128, kernel_size=3, strides=2, activation='relu')(x)
     x = BatchNormalization()(x)
-    x = MCDropout(.4)(x)
+    x = MCDropout(.6)(x)
 
     # add third layer
-    x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(x)
+    x = Conv1D(128, kernel_size=3, strides=2, activation='relu')(x)
     x = BatchNormalization()(x)
-    x = MCDropout(.4)(x)
+    x = MCDropout(.6)(x)
 
     # A GRU can capture temporal dependencies. We hope that the Conv1Ds learns to detect
     # the GFP peaks, and the GRU learns if the correct time interval passed between them.
-    #x = GRUWithMCDropout(32, return_sequences=True, dropout=.1)(x)
-    x = GRUWithMCDropout(32, dropout=.4)(x)
+    x = GRUWithMCDropout(64, return_sequences=True, dropout=.4)(x)
+    x = GRUWithMCDropout(64, dropout=.4)(x)
 
     # This is a fully-connected ('Dense') output layer with one neuron and
     # sigmoid activation, suitable for a binary classification problem like
