@@ -17,7 +17,7 @@ mlmodels/
 mlruns/
 
 # exclude Püntener datasets
-Püntener_Classification/data/
+Püntener_Classification/Püntener/data/
 
 #exclude notebook outputs
 notebooks/.ipynb_checkpoints
