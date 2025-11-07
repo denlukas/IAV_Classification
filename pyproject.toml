@@ -29,8 +29,8 @@ dependencies = [
 package = true
 
 [tool.setuptools]
-packages = ['IAV_Classification']
+packages = ['IAV_Classification','blinkognition']
 
 [project.scripts]
 app = "IAV_Classification.main:app"
-create-test-set = "IAV_Classification.data:app"
+blinko-app = "blinkognition.main:app"

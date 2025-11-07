@@ -9,10 +9,10 @@ import seaborn as sns
 import mlflow
 from mlflow.entities import RunInfo
 
-from infa.data import load_dataset_split
-from infa.ml import fit
-from infa.model import make_model
-from infa.utils import set_seeds
+from blinkognition.data import load_dataset_split
+from blinkognition.ml import fit
+from blinkognition.model import make_model
+from blinkognition.utils import set_seeds
 
 import typer
 

@@ -1,4 +1,3 @@
-from perun import monitor
 from pathlib import Path
 
 import mlflow
@@ -31,7 +30,6 @@ import warnings
 app = typer.Typer()
 
 
-@monitor()
 def fit(model: keras.Model,
         datasplit: DataSplit,
         run_name: str,

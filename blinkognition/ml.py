@@ -1,4 +1,3 @@
-from perun import monitor
 from pathlib import Path
 
 import mlflow
@@ -8,10 +7,10 @@ import pandas as pd
 import numpy as np
 from matplotlib.colors import Normalize
 
-from infa.utils import repo_dir, set_seeds
-from infa.mcc import MatthewsCorrelationCoefficient
-from infa.data import DataSplit, load_dataset_split
-from infa.model import make_model, monte_carlo_predict_samples
+from blinkognition.utils import repo_dir, set_seeds
+from blinkognition.mcc import MatthewsCorrelationCoefficient
+from blinkognition.data import DataSplit, load_dataset_split
+from blinkognition.model import make_model, monte_carlo_predict_samples
 
 import typer
 
@@ -28,7 +27,6 @@ from scipy.stats import wasserstein_distance
 app = typer.Typer()
 
 
-@monitor()
 def fit(model: keras.Model,
         datasplit: DataSplit,
         run_name: str,

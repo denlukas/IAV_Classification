@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 
-from infa.utils import repo_dir
+from blinkognition.utils import repo_dir
 
 import typer
 app = typer.Typer()
@@ -31,7 +31,7 @@ def create_test_set(
     seed: int | None = None,
     augment: bool = True,
     test_size: float = 0.2,
-    data_dir: Path = repo_dir / 'data',
+    data_dir: Path = repo_dir / 'data_blinko',
 ) -> None:
     """
     Given a TSV dataset (columns: label, trace_ID, time_1, time_2, ...),
@@ -130,7 +130,7 @@ def load_dataset_split(
     filename: str,
     test_size: float = 0.2,
     seed: int | None = None,
-    data_dir: Path = repo_dir / 'data',
+    data_dir: Path = repo_dir / 'data_blinko',
 ) -> DataSplit:
     """
     Load a TSV dataset (columns: label, trace_ID, time_1, ...),

@@ -23,7 +23,7 @@ mlflow_servers = dict(
 # or change the default from `mlflow_servers['local']` to 'kit'.
 @app.callback()
 def main(mlflow_server: str = mlflow_servers['local'],
-         experiment_name: str = 'IAV_Classification'):
+         experiment_name: str = 'iav_classification'):
     mlflow.set_tracking_uri(uri=mlflow_server)
     if mlflow.get_experiment_by_name(experiment_name) is None:
         print('Create new experiment: ', experiment_name)
@@ -33,3 +33,4 @@ def main(mlflow_server: str = mlflow_servers['local'],
 
 if __name__ == '__main__':
     app()
+
