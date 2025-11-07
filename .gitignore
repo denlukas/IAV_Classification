@@ -15,15 +15,3 @@ wheels/
 mlartifacts/
 mlmodels/
 mlruns/
-
-# exclude Püntener datasets
-Püntener_Classification/Püntener/data/
-
-# exclude notebook outputs
-notebooks/.ipynb_checkpoints
-notebooks/Data_Cleaning/
-notebooks/Exploring_Dataset
-notebooks/Feature_Importance
-notebooks/Peak_Feature_Extraction
-notebooks/Puentener2023_DataCode
-notebooks/Püntener
