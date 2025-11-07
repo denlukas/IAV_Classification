@@ -1,9 +1,9 @@
 import mlflow
 import typer
 
-from infa.data import app as data_app
-from infa.ml import app as ml_app
-from infa.cv import app as cv_app
+from Püntener.data import app as data_app
+from Püntener.ml import app as ml_app
+from Püntener.cv import app as cv_app
 
 app = typer.Typer()
 
@@ -23,7 +23,7 @@ mlflow_servers = dict(
 # or change the default from `mlflow_servers['local']` to 'kit'.
 @app.callback()
 def main(mlflow_server: str = mlflow_servers['local'],
-         experiment_name: str = 'infa'):
+         experiment_name: str = 'Püntener'):
     mlflow.set_tracking_uri(uri=mlflow_server)
     if mlflow.get_experiment_by_name(experiment_name) is None:
         print('Create new experiment: ', experiment_name)

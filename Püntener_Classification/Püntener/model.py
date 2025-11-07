@@ -3,7 +3,7 @@ import keras
 from keras.layers import (InputLayer, Input, Layer, Conv1D, Dense, Dropout, GRU, ReLU,
                           BatchNormalization, GlobalAveragePooling1D)
 
-from infa.mcc import MatthewsCorrelationCoefficient
+from Püntener.mcc import MatthewsCorrelationCoefficient
 
 import numpy as np
 

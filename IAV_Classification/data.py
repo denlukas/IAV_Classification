@@ -12,7 +12,7 @@ from itertools import chain
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.preprocessing import LabelEncoder
 
-from IAV_Classification.utils import repo_dir, set_seeds
+from iav_classification.utils import repo_dir, set_seeds
 
 from tsaug import TimeWarp, Drift, AddNoise
 
@@ -46,19 +46,18 @@ def create_test_set(
         data_dir: Path = repo_dir / 'data',
 ) -> None:
     """
-    Given a dataset as a TSV, create a test split reproducibly.
-    Then, save the two partitions as a TSV file each.
+    Creates a test split in a reproducible way.
+    Then, saves the two partitions as a TSV file each.
     """
 
-    # === Helper: Plot CV indices ===
+    # Plot CV indices
     def plot_cv_indices(cv, X, y, groups, labels, videos, ax, n_splits, lw=10):
         """
-        Visualize how samples are assigned to each train/test split.
-        Matches color scheme with clusmapsns(): strain and video colors are consistent.
+        Visualizes how samples are assigned to each train/test split.
         """
         cmap_cv = plt.cm.coolwarm
 
-        # --- Plot train/test splits per fold ---
+        # Plot train/test splits per fold
         for ii, (train_idx, test_idx) in enumerate(cv.split(X, y, groups)):
             indices = np.full(len(X), np.nan)
             indices[test_idx] = 1
@@ -67,13 +66,13 @@ def create_test_set(
                        c=indices, marker="_", lw=lw,
                        cmap=cmap_cv, vmin=-0.2, vmax=1.2)
 
-        # --- Strain label colors (PR8=blue, X31=orange) ---
+        # Strain label colors (PR8=blue, X31=orange)
         strain_palette = {'PR8': 'tab:blue', 'X31': 'tab:orange'}
         label_colors = pd.Series(labels).map(lambda l: strain_palette.get(l, 'gray')).to_numpy()
         ax.scatter(range(len(X)), [ii + 1.5] * len(X),
                    c=label_colors, marker="_", lw=lw)
 
-        # --- Video colors (same logic as clusmapsns) ---
+        # Video colors
         all_videos = np.unique(videos)
         combined_palette = sns.color_palette("tab20b", len(all_videos) // 2) + \
                            sns.color_palette("tab20c", len(all_videos) - len(all_videos) // 2)
@@ -83,7 +82,7 @@ def create_test_set(
         ax.scatter(range(len(X)), [ii + 2.5] * len(X),
                    c=video_colors, marker="_", lw=lw)
 
-        # --- Axis formatting ---
+        # Axis formatting
         yticklabels = list(range(n_splits)) + ['Strain', 'Video']
         ax.set(
             yticks=np.arange(n_splits + 2) + 0.5,
@@ -96,7 +95,7 @@ def create_test_set(
         ax.set_title(f'StratifiedGroupKFold - n_splits={n_splits}', fontsize=15)
         return ax
 
-    # === Load dataset ===
+    # Load dataset
     data = pd.read_csv(data_dir / filename, sep='\t').set_index(['label', 'video', 'trace'])
     if data.shape[1] == 61:
         warnings.warn(f'TSV at {filename} still has 61 timepoints.', RuntimeWarning)
@@ -104,7 +103,7 @@ def create_test_set(
     if seed is not None:
         set_seeds(seed)
 
-    # --- Label & group setup ---
+    # Label & group setup
     labels = data.index.get_level_values('label')
     videos = data.index.get_level_values('video')
     group_labels = data.reset_index().apply(lambda s: f"{s.label}_{s.video}", axis=1)
@@ -115,17 +114,17 @@ def create_test_set(
     else:
         y = LabelEncoder().fit_transform(labels)
 
-    # --- Define CV ---
+    # Define CV
     sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=seed)
     print(f"Number of folds available from StratifiedGroupKFold: {sgkf.get_n_splits(data.values, y, groups)}")
     print(sgkf)
 
-    # --- Plot CV structure ---
+    # Plot CV structure
     fig, ax = plt.subplots(figsize=(12, 6))
     plot_cv_indices(sgkf, data.values, y, groups, labels, videos, ax=ax, n_splits=5)
     plt.show()
 
-    # === Select specific fold ===
+    # Select specific fold
     for i, (train_idx, test_idx) in enumerate(sgkf.split(data.values, y, groups)):
         if i == fold:
             break
@@ -133,7 +132,7 @@ def create_test_set(
     train_and_val_set = data.iloc[train_idx]
     test_set = data.iloc[test_idx]
 
-    # === Data Augmentation ===
+    # Data Augmentation
     if augment:
         augmenter = (
             TimeWarp(n_speed_change=1, max_speed_ratio=2) * 1 +
@@ -161,14 +160,14 @@ def create_test_set(
         print("Skipping data augmentation...")
         train_and_val_final = train_and_val_set
 
-    # --- Clean base name (remove .tsv if present) ---
+    # Clean base name (remove .tsv if present)
     base_name = filename[:-4] if filename.endswith('.tsv') else filename
 
-    # --- Save train/test TSVs with clean names ---
+    # Save train/test TSVs with clean names
     train_and_val_final.to_csv(data_dir / f"{base_name}_train_val.tsv", sep='\t', header=True)
     test_set.to_csv(data_dir / f"{base_name}_test.tsv", sep='\t', header=True)
 
-    # === Summary print ===
+    # Summary print
     def print_summary(name: str, df: pd.DataFrame, augmented: bool = False, n_augmented: int = 0, n_original: int = 0):
         print(f"\n{name} set summary:")
         label_video = df.reset_index()[['label', 'video']].drop_duplicates()
@@ -187,7 +186,7 @@ def create_test_set(
             print(f"\n Total traces {name.lower()}: {total_traces}")
         print("-" * 50)
 
-    # --- Print summaries ---
+    # Print summaries if augmentation was used
     if augment:
         print_summary(
             "Train+Val",
@@ -200,7 +199,6 @@ def create_test_set(
         print_summary("Train+Val", train_and_val_final)
 
     print_summary("Test", test_set)
-
 
 
 @app.command()

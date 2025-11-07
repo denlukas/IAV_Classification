@@ -8,10 +8,10 @@ import pandas as pd
 import numpy as np
 from matplotlib.colors import Normalize
 
-from infa.utils import repo_dir, set_seeds
-from infa.mcc import MatthewsCorrelationCoefficient
-from infa.data import DataSplit, load_dataset_split
-from infa.model import make_model, monte_carlo_predict_samples
+from Püntener.utils import repo_dir, set_seeds
+from Püntener.mcc import MatthewsCorrelationCoefficient
+from Püntener.data import DataSplit, load_dataset_split
+from Püntener.model import make_model, monte_carlo_predict_samples
 
 import typer
 

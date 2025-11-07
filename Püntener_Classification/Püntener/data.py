@@ -1,15 +1,3 @@
-import warnings
-from dataclasses import dataclass
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-
-from infa.utils import repo_dir
-
-import typer
 app = typer.Typer()
 
 

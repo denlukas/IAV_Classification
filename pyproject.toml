@@ -1,5 +1,5 @@
 [project]
-name = "IAV_Classification"
+name = "iav_classification"
 version = "0.0.1"
 description = "Add your description here"
 authors = [
@@ -15,6 +15,7 @@ dependencies = [
     "mlflow>=3.2.0",
     "notebook>=7.4.4",
     "openpyxl>=3.1.5",
+    "perun>=0.9.0",
     "pydot>=4.0.1",
     "seaborn>=0.13.2",
     "tensorflow>=2.19.0",
@@ -29,8 +30,8 @@ dependencies = [
 package = true
 
 [tool.setuptools]
-packages = ['IAV_Classification']
+packages = ['iav_classification']
 
 [project.scripts]
-app = "IAV_Classification.main:app"
-create-test-set = "IAV_Classification.data:app"
+app = "iav_classification.main:app"
+create-test-set = "iav_classification.data:app"

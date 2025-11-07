@@ -9,10 +9,10 @@ import seaborn as sns
 import mlflow
 from mlflow.entities import RunInfo
 
-from infa.data import load_dataset_split
-from infa.ml import fit
-from infa.model import make_model
-from infa.utils import set_seeds
+from Püntener.data import load_dataset_split
+from Püntener.ml import fit
+from Püntener.model import make_model
+from Püntener.utils import set_seeds
 
 import typer
 
