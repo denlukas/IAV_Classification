@@ -9,10 +9,10 @@ import seaborn as sns
 import mlflow
 from mlflow.entities import RunInfo
 
-from iav_classification.data import load_dataset_split
-from iav_classification.ml import fit
-from iav_classification.model import make_model
-from iav_classification.utils import set_seeds
+from IAV_Classification.data import load_dataset_split
+from IAV_Classification.ml import fit
+from IAV_Classification.model import make_model
+from IAV_Classification.utils import set_seeds
 
 import typer
 
@@ -72,7 +72,7 @@ def train_fold(fold: int,
         mlflow.log_param('fold_batch_size', batch_size)
         model = make_model(datasplit.x_train.shape[1:])
 
-        # this is another hack to space out the mcd along the folds
+        # this is another hack to space out a parameter along the folds
         #mcd = float(np.linspace(.1, .9, n_folds)[fold])
         #mlflow.log_param('mcd', mcd)
         #model = make_model(datasplit.x_train.shape[1:], mcd=mcd) pass mcd here if you want to use it, but modify the make_model function accordingly

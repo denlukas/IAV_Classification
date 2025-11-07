@@ -8,11 +8,11 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 
-from iav_classification.utils import repo_dir, set_seeds
-from iav_classification.mcc import MatthewsCorrelationCoefficient
-from iav_classification.data import DataSplit, load_dataset_split
+from IAV_Classification.utils import repo_dir, set_seeds
+from IAV_Classification.mcc import MatthewsCorrelationCoefficient
+from IAV_Classification.data import DataSplit, load_dataset_split
 
-from iav_classification.model import make_model, monte_carlo_predict_samples
+from IAV_Classification.model import make_model, monte_carlo_predict_samples
 
 import typer
 
@@ -27,8 +27,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from scipy.stats import wasserstein_distance
 import warnings
-from matplotlib import cm
-import matplotlib.colors as mcolors
 
 app = typer.Typer()
 
@@ -48,15 +46,13 @@ def fit(model: keras.Model,
     callbacks = [
         mlflow.keras.MlflowCallback(),
         keras.callbacks.ModelCheckpoint(
-            chkpoint, save_best_only=True, monitor='val_loss', mode='min'
+            chkpoint, save_best_only=True, monitor='val_loss', mode='min',
         ),
     ]
 
     if patience is not None and patience > 0:
         callbacks.append(keras.callbacks.EarlyStopping(
-            monitor='val_loss', mode='min', patience=patience, verbose=1,
-            restore_best_weights=True  # <- ensure we end with best weights
-        ))
+            monitor='val_loss', mode='min', patience=patience, verbose=1))
 
     history = model.fit(
         datasplit.x_train,
@@ -86,14 +82,11 @@ def train(
 ) -> None:
     seed = set_seeds(seed)
 
-    chkpoint = repo_dir / 'mlmodels' / f'{run_name}.keras'  # we'll reuse this
-    history = None  # guard so we can safely reference it later
-
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.log_params(dict(seed=seed, dataset=dataset,
                                run_name=run_name,
                                patience=patience, epochs=epochs,
-                               batch_size=batch_size))
+                               batch_size=batch_size, ))
 
         datasplit = load_dataset_split(dataset, n_splits=5, seed=seed, fold=fold)
         model = make_model(datasplit.x_train.shape[1:])
@@ -105,68 +98,71 @@ def train(
                           epochs=epochs,
                           batch_size=batch_size,
                           patience=patience,
-                          verbose=verbose)
+                          verbose=verbose,
+                          )
         except KeyboardInterrupt:
-            print("\n[train] Training interrupted by user (KeyboardInterrupt).")
-        finally:
-            # If a best checkpoint exists, use that model for evaluation/logging.
-            if chkpoint.exists():
-                try:
-                    model = keras.models.load_model(chkpoint)
-                    print(f"[train] Loaded best checkpoint: {chkpoint}")
-                except Exception as e:
-                    print(f"[train] Could not load checkpoint {chkpoint}: {e}")
+            pass
 
-            # Optional training curves (only if we have history)
-            if history is not None:
-                plt.figure(figsize=(12, 5))
-                # Loss
-                plt.subplot(1, 2, 1)
-                plt.plot(history.history.get('loss', []), label='Training Loss')
-                if 'val_loss' in history.history:
-                    plt.plot(history.history['val_loss'], label='Validation Loss')
-                plt.title('Model Loss'); plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
+        # -------------------
+        # Plot Training History
+        # -------------------
+        plt.figure(figsize=(12, 5))
 
-                # Accuracy (if available)
-                if ('acc' in history.history) or ('val_acc' in history.history) or \
-                   ('accuracy' in history.history) or ('val_accuracy' in history.history):
-                    plt.subplot(1, 2, 2)
-                    for k in ('acc', 'accuracy'):
-                        if k in history.history:
-                            plt.plot(history.history[k], label=f'Train {k}')
-                        if f'val_{k}' in history.history:
-                            plt.plot(history.history[f'val_{k}'], label=f'Val {k}')
-                    plt.title('Accuracy'); plt.xlabel('Epoch'); plt.ylabel('Accuracy'); plt.legend()
+        # Subplot 1: Loss
+        plt.subplot(1, 2, 1)
+        plt.plot(history.history['loss'], label='Training Loss')
+        if 'val_loss' in history.history:
+            plt.plot(history.history['val_loss'], label='Validation Loss')
+        plt.title('Model Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
 
-                plt.suptitle('Training History', fontsize=16, weight='bold')
-                plt.tight_layout(rect=[0, 0, 1, 0.95])
-                plt.show()
+        # Subplot 2: Accuracy (if available)
+        if 'accuracy' in history.history or 'val_accuracy' in history.history:
+            plt.subplot(1, 2, 2)
+            if 'accuracy' in history.history:
+                plt.plot(history.history['accuracy'], label='Training Accuracy')
+            if 'val_accuracy' in history.history:
+                plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+            plt.title('Model Accuracy')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.legend()
 
-            # Final evaluation on the validation split
-            y_pred_prob = model.predict(datasplit.x_test).astype('float32').flatten()
-            y_pred_bin = (y_pred_prob > 0.5).astype(int)
+        plt.suptitle('Training History', fontsize=16, weight='bold')
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.show()
 
-            cm = confusion_matrix(datasplit.y_test, y_pred_bin)
-            acc = accuracy_score(datasplit.y_test, y_pred_bin)
-            mcc = matthews_corrcoef(datasplit.y_test, y_pred_bin)
+        # --- Predictions on test split ---
+        y_pred_prob = model.predict(datasplit.x_test).astype('float32')
+        y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
-            print("\n================ Final Validation Metrics ================\n")
-            print("Confusion Matrix:\n", cm)
-            print(f"Accuracy: {acc:.4f}")
-            print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
+        # --- Confusion matrix ---
+        cm = confusion_matrix(datasplit.y_test, y_pred_bin)
+        print("\nConfusion Matrix:")
+        print(cm)
 
-            # Log to MLflow (protect against missing val_loss)
-            metrics_to_log = {'accuracy': acc, 'mcc': mcc}
-            if history is not None and 'val_loss' in history.history:
-                metrics_to_log['val_loss_best'] = float(np.min(history.history['val_loss']))
-            mlflow.log_metrics(metrics_to_log)
+        # --- Metrics ---
+        acc = accuracy_score(datasplit.y_test, y_pred_bin)
+        mcc = matthews_corrcoef(datasplit.y_test, y_pred_bin)
 
-            # Save model to MLflow
-            signature = mlflow.models.infer_signature(
-                datasplit.x_train[:4],
-                model.predict(datasplit.x_train[:4])
-            )
-            mlflow.keras.log_model(model, run_name, signature=signature)
+        print(f"\nAccuracy: {acc:.4f}")
+        print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
+
+        # --- Log to MLflow ---
+        mlflow.log_metrics({
+            'accuracy': acc,
+            'mcc': mcc,
+            'val_loss_best': min(history.history['val_loss']),
+        })
+
+        # --- Save model to MLflow ---
+        signature = mlflow.models.infer_signature(
+            datasplit.x_train[:4],
+            model.predict(datasplit.x_train[:4])
+        )
+        mlflow.keras.log_model(model, run_name, signature=signature)
 
 @app.command()
 def evaluate(model_uri: str,
@@ -179,21 +175,12 @@ def evaluate(model_uri: str,
              ct_threshold: float = 0,
              spaced_threshold: bool = True
              ) -> None:
-    """
-     Evaluate a trained model on the validation dataset.
-
-     Args:
-         model_uri (str): Path or URI to the trained model (MLflow or local .keras file)
-         dataset (Path): Path to the *_val.tsv file
-         include_uncertainty (bool): If True, perform Monte Carlo dropout predictions
-         use_post_analysis (bool): If True, perform Wasserstein CT filtering analysis
-         n_mc_samples (int): Number of MC samples for uncertainty estimation
-         ct_threshold (float): Threshold for filtering by min Wasserstein distance
-     """
     model = mlflow.keras.load_model(model_uri)
     datasplit = load_dataset_split(dataset, n_splits=5, seed=seed, fold=fold)
 
+    # -------------------
     # Monte Carlo predictions
+    # -------------------
     if include_uncertainty:
         print("Running Monte Carlo prediction...")
         y_pred_prob, probs_try = monte_carlo_predict_samples(
@@ -211,7 +198,9 @@ def evaluate(model_uri: str,
     y_pred_prob = y_pred_prob.flatten()
     y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
+    # -------------------
     # Standard evaluation metrics
+    # -------------------
     acc = accuracy_score(datasplit.y_test, y_pred_bin)
     mcc = matthews_corrcoef(datasplit.y_test, y_pred_bin)
 
@@ -228,7 +217,9 @@ def evaluate(model_uri: str,
     pr8_traces = np.sum(datasplit.y_test == 1)
     x31_traces = np.sum(datasplit.y_test == 0)
 
+    # -------------------
     # Evaluation plots
+    # -------------------
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
     disp = ConfusionMatrixDisplay.from_predictions(
         datasplit.y_test, y_pred_bin, ax=ax[0, 0], cmap="viridis",
@@ -241,7 +232,7 @@ def evaluate(model_uri: str,
         cbar.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
-    # ROC Curve
+    # --- ROC Curve ---
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -251,7 +242,7 @@ def evaluate(model_uri: str,
     ax[0, 1].set_ylim(0, 1)
     ax[0, 1].legend(loc="lower right")
 
-    # Precision-Recall Curve
+    # --- Precision-Recall Curve ---
     baseline_precision = np.mean(datasplit.y_test)
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
     ax[1, 0].hlines(
@@ -265,7 +256,7 @@ def evaluate(model_uri: str,
     ax[1, 0].set_ylim(0, 1)
     ax[1, 0].legend(loc="lower left")
 
-    # Metrics summary box
+    # --- Metrics summary box ---
     metrics_text = (
         f"Total number of traces: {total_traces}\n"
         f"PR8: {pr8_traces}\n"
@@ -291,8 +282,8 @@ def evaluate(model_uri: str,
     print(f"Average Precision (PR-AUC): {ap_score:.4f}")
 
     # -------------------
-
     # Post-analysis with CT (Wasserstein distance)
+    # -------------------
     if use_post_analysis and include_uncertainty:
         print("\n================ Post-analysis ================\n")
 
@@ -323,7 +314,9 @@ def evaluate(model_uri: str,
             "min_wasserstein": list_min_w_distances
         })
 
+        # -------------------
         # Plot min_wasserstein distribution with viridis gradient
+        # -------------------
         plt.figure(figsize=(6, 4))
 
         # Compute histogram
@@ -343,7 +336,9 @@ def evaluate(model_uri: str,
         plt.title("Distribution of minimal Wasserstein distance")
         plt.show()
 
+        # -------------------
         # Second Evaluation Report (Filtered by CT threshold)
+        # -------------------
         mask_ct = post_df["min_wasserstein"] > ct_threshold
         filtered_df = post_df[mask_ct]
 
@@ -377,7 +372,7 @@ def evaluate(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
-            # Filtered ROC Curve
+            # --- Filtered ROC Curve ---
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -387,7 +382,7 @@ def evaluate(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
-            # Filtered Precision-Recall Curve
+            # --- Filtered Precision-Recall Curve ---
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(
@@ -401,7 +396,6 @@ def evaluate(model_uri: str,
             ax[1, 0].set_ylim(0, 1)
             ax[1, 0].legend(loc="lower left")
 
-            # Print metrics (number of traces total, each trace & classification report)
             metrics_text = (
                 f"Traces remaining: {total_filtered}\n"
                 f"PR8: {pr8_filtered}\n"
@@ -413,12 +407,11 @@ def evaluate(model_uri: str,
             ax[1, 1].axis("off")
             ax[1, 1].text(0, 1, metrics_text, ha="left", va="top",
                           family="monospace", fontsize=11)
-            # Title
+
             plt.suptitle("Filtered Evaluation Report", fontsize=20, weight="bold")
             plt.tight_layout(rect=[0, 0.05, 1, 0.95])
             plt.show()
 
-            # Printed evaluation report in terminal
             print("\n================ Filtered Evaluation Report ================\n")
             print(f"Traces remaining: {total_filtered}")
             print(f"PR8: {pr8_filtered}")
@@ -429,10 +422,12 @@ def evaluate(model_uri: str,
             print(f"ROC-AUC (CT>{ct_threshold}): {auc_filt:.4f}")
             print(f"Average Precision (PR-AUC): {ap_filt:.4f}")
 
-        # Strain label colors
+        # --- Strain label colors (consistent across all plots) ---
         strain_palette = {'PR8': 'tab:blue', 'X31': 'tab:orange'}
 
+        # -------------------
         # ECDF Plot
+        # -------------------
         fig, ax = plt.subplots(figsize=(6, 5))
 
         # Get min/max for x-axis limits
@@ -452,11 +447,11 @@ def evaluate(model_uri: str,
                 label=f"{label} (n={len(values)})"
             )
 
-        # Remove whitespace
+        # --- Remove whitespace ---
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(0, 1)
 
-        # Labels and title
+        # --- Labels and title ---
         ax.set_xlabel("min_wasserstein")
         ax.set_ylabel("ECDF")
         ax.set_title(f"ECDF of min_wasserstein by class (CT>{ct_threshold})")
@@ -465,7 +460,9 @@ def evaluate(model_uri: str,
         plt.tight_layout()
         plt.show()
 
+        # -------------------
         # Bar plot for fractions across CT thresholds
+        # -------------------
         #min_w = post_df["min_wasserstein"].min()
         max_w = post_df["min_wasserstein"].max()
 
@@ -493,7 +490,6 @@ def evaluate(model_uri: str,
 
             fractions_per_threshold.append(filtered_fractions)
 
-        # Print figure
         fig_bar, ax_bar = plt.subplots(figsize=(5, 4))
         bar_width = 0.7
         x_positions = np.arange(len(ct_thresholds))
@@ -521,7 +517,9 @@ def evaluate(model_uri: str,
         plt.tight_layout()
         plt.show()
 
+        # -------------------
         # Second Evaluation Report (Filtered by CT threshold)
+        # -------------------
         if spaced_threshold:
             min_w = post_df["min_wasserstein"].min()
             max_w = post_df["min_wasserstein"].max()
@@ -565,7 +563,7 @@ def evaluate(model_uri: str,
                     cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
                 ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
-                # Filtered ROC Curve
+                # --- Filtered ROC Curve ---
                 ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
                 ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
                 ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -575,7 +573,7 @@ def evaluate(model_uri: str,
                 ax[0, 1].set_ylim(0, 1)
                 ax[0, 1].legend(loc="lower right")
 
-                # Filtered Precision-Recall Curve
+                # --- Filtered Precision-Recall Curve ---
                 ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
                 baseline_precision_filt = np.mean(y_true_filt)
                 ax[1, 0].hlines(
@@ -637,10 +635,14 @@ def test(model_uri: str,
         ct_threshold (float): Threshold for filtering by min Wasserstein distance
     """
 
+    # -------------------
     # Load model
+    # -------------------
     model = mlflow.keras.load_model(model_uri)
 
+    # -------------------
     # Load test dataset
+    # -------------------
     dataset_path = Path(dataset)
     if not dataset_path.exists():
         # Try to find it in your default data directory
@@ -659,7 +661,9 @@ def test(model_uri: str,
     else:
         y_test = LabelEncoder().fit_transform(labels)
 
+    # -------------------
     # Monte Carlo predictions (optional)
+    # -------------------
     if include_uncertainty:
         print("Running Monte Carlo prediction...")
         y_pred_prob, probs_try = monte_carlo_predict_samples(
@@ -677,7 +681,9 @@ def test(model_uri: str,
     y_pred_prob = y_pred_prob.flatten()
     y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
+    # -------------------
     # Standard evaluation metrics
+    # -------------------
     acc = accuracy_score(y_test, y_pred_bin)
     mcc = matthews_corrcoef(y_test, y_pred_bin)
 
@@ -694,7 +700,9 @@ def test(model_uri: str,
     pr8_traces = np.sum(y_test == 1)
     x31_traces = np.sum(y_test == 0)
 
+    # -------------------
     # Evaluation plots
+    # -------------------
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred_bin, ax=ax[0, 0], cmap="viridis",
@@ -706,8 +714,7 @@ def test(model_uri: str,
     if cbar:
         cbar.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
-
-    # ROC Curve
+    # --- ROC Curve ---
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -717,7 +724,7 @@ def test(model_uri: str,
     ax[0, 1].set_ylim(0, 1)
     ax[0, 1].legend(loc="lower right")
 
-    # Precision-Recall Curve
+    # --- Precision-Recall Curve ---
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
     ax[1, 0].hlines(
         y=baseline_precision, xmin=0, xmax=1,
@@ -753,7 +760,9 @@ def test(model_uri: str,
     print(f"ROC-AUC: {auc_score:.4f}")
     print(f"Average Precision (PR-AUC): {ap_score:.4f}")
 
+    # -------------------
     # Post-analysis with CT (Wasserstein distance)
+    # -------------------
     if use_post_analysis and include_uncertainty:
         print("\n================ Post-analysis ================\n")
 
@@ -784,7 +793,9 @@ def test(model_uri: str,
             "min_wasserstein": list_min_w_distances
         })
 
+        # -------------------
         # Plot min_wasserstein distribution with viridis gradient
+        # -------------------
         plt.figure(figsize=(6, 4))
 
         # Compute histogram
@@ -804,7 +815,9 @@ def test(model_uri: str,
         plt.title("Distribution of minimal Wasserstein distance")
         plt.show()
 
+        # -------------------
         # Second Evaluation Report (Filtered by CT threshold)
+        # -------------------
         mask_ct = post_df["min_wasserstein"] > ct_threshold
         filtered_df = post_df[mask_ct]
 
@@ -838,7 +851,7 @@ def test(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
-            # Filtered ROC Curve
+            # --- Filtered ROC Curve ---
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -848,7 +861,7 @@ def test(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
-            # Filtered Precision-Recall Curve
+            # --- Filtered Precision-Recall Curve ---
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(
@@ -888,10 +901,12 @@ def test(model_uri: str,
             print(f"ROC-AUC (CT>{ct_threshold}): {auc_filt:.4f}")
             print(f"Average Precision (PR-AUC): {ap_filt:.4f}")
 
-        # Strain label colors (consistent across all plots)
+        # --- Strain label colors (consistent across all plots) ---
         strain_palette = {'PR8': 'tab:blue', 'X31': 'tab:orange'}
 
+        # -------------------
         # ECDF Plot
+        # -------------------
         fig, ax = plt.subplots(figsize=(6, 5))
 
         x_min, x_max = post_df["min_wasserstein"].min(), post_df["min_wasserstein"].max()
@@ -911,11 +926,11 @@ def test(model_uri: str,
                 label=f"{label} (n={len(values)})"
             )
 
-        # Remove whitespace around axes
+        # --- Remove whitespace around axes ---
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(0, 1)
 
-        # Axis labels and styling
+        # --- Axis labels and styling ---
         ax.set_xlabel("min_wasserstein")
         ax.set_ylabel("ECDF")
         ax.set_title(f"ECDF of min_wasserstein by class (CT>{ct_threshold})")
@@ -924,7 +939,9 @@ def test(model_uri: str,
         plt.tight_layout()
         plt.show()
 
+        # -------------------
         # Bar plot for fractions across CT thresholds
+        # -------------------
         #min_w = post_df["min_wasserstein"].min()
         max_w = post_df["min_wasserstein"].max()
 
@@ -979,7 +996,9 @@ def test(model_uri: str,
         plt.tight_layout()
         plt.show()
 
+        # -------------------
         # Second Evaluation Report (Filtered by CT threshold)
+        # -------------------
         if spaced_threshold:
             min_w = post_df["min_wasserstein"].min()
             max_w = post_df["min_wasserstein"].max()
@@ -1023,7 +1042,7 @@ def test(model_uri: str,
                     cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
                 ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
-                # Filtered ROC Curve
+                # --- Filtered ROC Curve ---
                 ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
                 ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
                 ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -1033,7 +1052,7 @@ def test(model_uri: str,
                 ax[0, 1].set_ylim(0, 1)
                 ax[0, 1].legend(loc="lower right")
 
-                # Filtered Precision-Recall Curve
+                # --- Filtered Precision-Recall Curve ---
                 ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
                 baseline_precision_filt = np.mean(y_true_filt)
                 ax[1, 0].hlines(
@@ -1047,7 +1066,6 @@ def test(model_uri: str,
                 ax[1, 0].set_ylim(0, 1)
                 ax[1, 0].legend(loc="lower left")
 
-                # Printed metrics such as remaining traces total, each strain and Classification report
                 metrics_text = (
                     f"Traces remaining: {total_filtered}\n"
                     f"PR8: {pr8_filtered}\n"
@@ -1091,11 +1109,15 @@ def predict_labeled(model_uri: str,
         threshold (float): Probability cutoff for binary classification (default=0.5)
     """
 
+    # -------------------
     # Load model
+    # -------------------
     print(f"Loading model from: {model_uri}")
     model = mlflow.keras.load_model(model_uri)
 
+    # -------------------
     # Load data
+    # -------------------
     dataset_path = Path(dataset)
     if not dataset_path.exists():
         candidate = repo_dir / 'data' / dataset_path.name
@@ -1122,7 +1144,9 @@ def predict_labeled(model_uri: str,
     # Numeric features (from 4th column onward)
     x_data = data.iloc[:, 3:].values[:, :, np.newaxis]
 
+    # -------------------
     # Encode labels (binary classification)
+    # -------------------
     if set(labels.unique()) == {"X31", "PR8"}:
         y_true = np.array([1 if l == "PR8" else 0 for l in labels])
         target_names = ["X31", "PR8"]
@@ -1132,12 +1156,16 @@ def predict_labeled(model_uri: str,
         y_true = le.fit_transform(labels)
         target_names = le.classes_.tolist()
 
+    # -------------------
     # Run predictions
+    # -------------------
     print("Running predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
 
+    # -------------------
     # Compute metrics
+    # -------------------
     acc = accuracy_score(y_true, y_pred_bin)
     mcc = matthews_corrcoef(y_true, y_pred_bin)
     auc_score = roc_auc_score(y_true, y_pred_prob)
@@ -1145,7 +1173,9 @@ def predict_labeled(model_uri: str,
     class_report = classification_report(y_true, y_pred_bin, target_names=target_names)
     cm = confusion_matrix(y_true, y_pred_bin)
 
+    # -------------------
     # Print results
+    # -------------------
     print("\n================ Prediction Evaluation ================\n")
     print(f"Accuracy: {acc:.4f}")
     print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
@@ -1155,7 +1185,9 @@ def predict_labeled(model_uri: str,
     print(class_report)
     print("Confusion Matrix:\n", cm)
 
+    # -------------------
     # Save predictions
+    # -------------------
     pred_df = pd.DataFrame({
         "label_true": labels,
         "video": videos,
@@ -1169,7 +1201,9 @@ def predict_labeled(model_uri: str,
     pred_df.to_csv(output_tsv, sep="\t", index=False)
     print(f"\nPredictions saved to: {output_tsv}")
 
+    # -------------------
     # Visualization
+    # -------------------
     fig, ax = plt.subplots(1, 3, figsize=(15, 4))
 
     # Confusion Matrix
@@ -1218,24 +1252,21 @@ def predict_unlabeled(model_uri: str,
         output_tsv (Path): Path where predictions will be saved
         threshold (float): Probability cutoff for binary classification (default=0.5)
     """
+    import warnings
 
+    # -------------------
     # Load model
+    # -------------------
     print(f"Loading model from: {model_uri}")
     model = mlflow.keras.load_model(model_uri)
 
-    # Load data (like in predict_labeled)
-    dataset_path = Path(data_tsv)
-    if not dataset_path.exists():
-        candidate = repo_dir / 'data' / dataset_path.name
-        if candidate.exists():
-            dataset_path = candidate
-        else:
-            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    # -------------------
+    # Load data
+    # -------------------
+    print(f"Loading unlabeled dataset from: {data_tsv}")
+    data = pd.read_csv(data_tsv, sep="\t")
 
-    print(f"Loading unlabeled dataset from: {dataset_path}")
-    data = pd.read_csv(dataset_path, sep="\t")
-
-    # Expect first column 'trace'
+    # Check first column
     if "trace" not in data.columns:
         raise ValueError("Input TSV must contain a 'trace' column as the first column.")
 
@@ -1243,7 +1274,7 @@ def predict_unlabeled(model_uri: str,
     traces = data["trace"].astype(str)
 
     # Extract numeric features (all columns after 'trace')
-    x_data = data.iloc[:, 1:].values[:, :, np.newaxis]
+    x_data = data.drop(columns=["trace"]).values[:, :, np.newaxis]
 
     # Warn if suspicious number of timepoints
     if x_data.shape[1] in [61, 63]:
@@ -1252,7 +1283,9 @@ def predict_unlabeled(model_uri: str,
             RuntimeWarning,
         )
 
+    # -------------------
     # Run predictions
+    # -------------------
     print("Running model predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
@@ -1261,7 +1294,9 @@ def predict_unlabeled(model_uri: str,
     target_names = ["X31", "PR8"]
     predicted_labels = [target_names[i] for i in y_pred_bin]
 
+    # -------------------
     # Save results
+    # -------------------
     pred_df = pd.DataFrame({
         "trace": traces,
         "y_pred_prob": y_pred_prob,
@@ -1273,18 +1308,13 @@ def predict_unlabeled(model_uri: str,
     pred_df.to_csv(output_tsv, sep="\t", index=False)
     print(f"\nPredictions saved to: {output_tsv}")
 
-    # Plot probability distribution (Viridis colormap)
+    # -------------------
+    # Plot probability distribution
+    # -------------------
     plt.figure(figsize=(6, 4))
-    n, bins, patches = plt.hist(y_pred_prob, bins=30, edgecolor="black")
-
-    # Apply viridis colormap to bins according to bin height
-    norm = mcolors.Normalize(vmin=min(n), vmax=max(n))
-    cmap = cm.get_cmap("viridis")
-    for count, patch in zip(n, patches):
-        patch.set_facecolor(cmap(norm(count)))
-
+    plt.hist(y_pred_prob, bins=30, color="skyblue", edgecolor="black")
     plt.axvline(threshold, color="red", linestyle="--", label=f"Threshold = {threshold}")
-    plt.title("Distribution of Predicted Probabilities", fontsize=12, weight="bold")
+    plt.title("Distribution of Predicted Probabilities")
     plt.xlabel("Predicted Probability (PR8 class)")
     plt.ylabel("Count")
     plt.legend()

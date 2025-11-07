@@ -3,7 +3,7 @@ import keras
 from keras.layers import (InputLayer, Input, Layer, Conv1D, Dense, Dropout, GRU, ReLU,
                           BatchNormalization, GlobalAveragePooling1D)
 
-from iav_classification.mcc import MatthewsCorrelationCoefficient
+from IAV_Classification.mcc import MatthewsCorrelationCoefficient
 
 import numpy as np
 
@@ -78,6 +78,7 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
         # predicted probabilities / logits and actually true, binary labels.
         loss=keras.losses.BinaryCrossentropy(),
         metrics=[
+            # which stats do we want to track?
             keras.metrics.BinaryAccuracy(name='acc'),
             #  MCC
             MatthewsCorrelationCoefficient(name='mcc'),
@@ -85,11 +86,16 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
             keras.metrics.AUC(name='auc', curve='ROC'),
             #  area under the PR curve
             keras.metrics.AUC(name='auc_pr', curve='PR'),
-            #  predictions with the highest values:
+            #  a metric corresponding to either of the two following questions, both of which are
+            #  about the predictions with the highest values:
+            #  - Out of the x predictions with the highest value, what share is correct?
+            #  - When we sort the predictions in descending order, what share of the actual positives
+            #    do we find before we find a negative? Think about the more general case of this!
             keras.metrics.PrecisionAtRecall(0.8, name='precision_at_recall_0.8')
         ],
     )
     return model
+
 
 # You shouldn't need to adapt these two classes:
 @keras.saving.register_keras_serializable(package='Custom', name='MCDropout')
@@ -129,7 +135,9 @@ def monte_carlo_predict(model, x, training=False, mc_dropout=False):
         x = _call_layer(layer, x)
     return x
 
+# ----------------------------
 # Monte Carlo Prediction
+# ----------------------------
 def monte_carlo_predict_samples(model, x, n_mc_samples=100):
     """
     Performs multiple stochastic forward passes with MC dropout.
