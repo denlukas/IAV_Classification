@@ -20,8 +20,8 @@ mlartifacts_bak/
 mlmodels_bak/
 mlruns_bak/
 
-# exclude Püntener datasets
-
+# exclude output folder
+IAV_output/
 
 #exclude notebook outputs
 notebooks/.ipynb_checkpoints

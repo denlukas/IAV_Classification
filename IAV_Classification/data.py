@@ -98,8 +98,6 @@ def create_test_set(
 
     # === Load dataset ===
     data = pd.read_csv(data_dir / filename, sep='\t').set_index(['label', 'video', 'trace'])
-    if data.shape[1] == 61:
-        warnings.warn(f'TSV at {filename} still has 61 timepoints.', RuntimeWarning)
 
     if seed is not None:
         set_seeds(seed)
@@ -123,6 +121,18 @@ def create_test_set(
     # --- Plot CV structure ---
     fig, ax = plt.subplots(figsize=(12, 6))
     plot_cv_indices(sgkf, data.values, y, groups, labels, videos, ax=ax, n_splits=5)
+
+    # === Save figure automatically ===
+    output_dir = repo_dir / "IAV_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    base_name = Path(filename).stem
+    fig_path = output_dir / f"{base_name}_sgkf_fold{fold}.png"
+
+    plt.tight_layout()
+    fig.savefig(fig_path, dpi=300)
+
+    # Keep plot visible for interactive review
     plt.show()
 
     # === Select specific fold ===
@@ -202,7 +212,6 @@ def create_test_set(
     print_summary("Test", test_set)
 
 
-
 @app.command()
 def load_dataset_split(
         filename: str,
@@ -240,8 +249,6 @@ def load_dataset_split(
 
     data = pd.read_csv(data_dir / filename,
                        sep='\t').set_index(['label', 'video', 'trace'])
-    if data.shape[1] == 61:
-        warnings.warn(f'TSV at {filename} still has 61 timepoints.', RuntimeWarning)
 
     x = data.values[:, :, np.newaxis]
     labels = data.index.get_level_values('label')
