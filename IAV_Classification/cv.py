@@ -66,15 +66,15 @@ def train_fold(fold: int,
             return fold
 
         # this is a hack to get the batch size to increase with the fold number
-        #batch_size = [2 ** i for i in range(3, 20)][fold]
-        #mlflow.log_param('fold_batch_size', batch_size)
-        #model = make_model(datasplit.x_train.shape[1:])
+        batch_size = [2 ** i for i in range(3, 20)][fold]
+        mlflow.log_param('fold_batch_size', batch_size)
+        model = make_model(datasplit.x_train.shape[1:])
 
         # this is another hack to space out a parameter along the folds
-        mcd_values = np.arange(0.1, 1.0, 0.1)  # [0.1, 0.2, ..., 0.9]
-        mcd = float(mcd_values[fold])
-        mlflow.log_param('mcd', mcd)
-        model = make_model(datasplit.x_train.shape[1:], mcd=mcd)
+        #mcd_values = np.arange(0.1, 1.0, 0.1)  # [0.1, 0.2, ..., 0.9]
+        #mcd = float(mcd_values[fold])
+        #mlflow.log_param('mcd', mcd)
+        #model = make_model(datasplit.x_train.shape[1:], mcd=mcd)
 
         try:
             history = fit(model=model,
