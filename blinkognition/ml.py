@@ -254,7 +254,7 @@ def evaluate(model_uri: str,
             "min_wasserstein": list_min_w_distances
         })
 
-        # --- save ONE TSV with full post-analysis table ---
+        # --- save TSV with full post-analysis table ---
         post_csv = output_dir / f"{base_tag}_post_analysis.tsv"
         post_df.to_csv(post_csv, sep="\t", index=False)
         print(f"[saved] {post_csv}")
@@ -447,8 +447,8 @@ def evaluate(model_uri: str,
             plt.close(fig_loop)
 
             print("\n====== Post-analysis Filtered Evaluation ======")
-            print(f"CT threshold: {ct}")
-            print(f"Traces remaining: {len(y_true_filtered)} / {len(datasplit.y_test)}")
+            print(f"CT threshold: {ct_th}")
+            print(f"Traces remaining: {len(y_true_filt)} / {len(datasplit.y_test)}")
             print(f"Accuracy: {acc_f:.4f}")
             print(f"MCC: {mcc_f:.4f}")
             print("\nClassification Report:")

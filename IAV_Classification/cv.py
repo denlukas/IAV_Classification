@@ -1,13 +1,11 @@
 import concurrent.futures
 import multiprocessing as mp
 from functools import partial
+import numpy as np
 
 import sys
-import numpy as np
-import seaborn as sns
 
 import mlflow
-from mlflow.entities import RunInfo
 
 from IAV_Classification.data import load_dataset_split
 from IAV_Classification.ml import fit
@@ -68,14 +66,15 @@ def train_fold(fold: int,
             return fold
 
         # this is a hack to get the batch size to increase with the fold number
-        batch_size = [2 ** i for i in range(3, 20)][fold]
-        mlflow.log_param('fold_batch_size', batch_size)
-        model = make_model(datasplit.x_train.shape[1:])
+        #batch_size = [2 ** i for i in range(3, 20)][fold]
+        #mlflow.log_param('fold_batch_size', batch_size)
+        #model = make_model(datasplit.x_train.shape[1:])
 
         # this is another hack to space out a parameter along the folds
-        #mcd = float(np.linspace(.1, .9, n_folds)[fold])
-        #mlflow.log_param('mcd', mcd)
-        #model = make_model(datasplit.x_train.shape[1:], mcd=mcd) pass mcd here if you want to use it, but modify the make_model function accordingly
+        mcd_values = np.arange(0.1, 1.0, 0.1)  # [0.1, 0.2, ..., 0.9]
+        mcd = float(mcd_values[fold])
+        mlflow.log_param('mcd', mcd)
+        model = make_model(datasplit.x_train.shape[1:], mcd=mcd)
 
         try:
             history = fit(model=model,
