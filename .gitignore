@@ -16,8 +16,12 @@ mlartifacts/
 mlmodels/
 mlruns/
 
+mlartifacts_bak/
+mlmodels_bak/
+mlruns_bak/
+
 # exclude Püntener datasets
-Püntener_Classification/data/
+
 
 #exclude notebook outputs
 notebooks/.ipynb_checkpoints

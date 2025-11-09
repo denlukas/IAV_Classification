@@ -23,6 +23,8 @@ from sklearn.metrics import (
 )
 
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib import colors as mcolors
 from matplotlib.colors import Normalize
 from scipy.stats import wasserstein_distance
 import warnings
@@ -80,87 +82,104 @@ def train(
 ) -> None:
     seed = set_seeds(seed)
 
+    # where ModelCheckpoint in fit() saves the model
+    chkpoint = repo_dir / 'mlmodels' / f'{run_name}.keras'
+
     with mlflow.start_run(run_name=run_name) as run:
-        mlflow.log_params(dict(seed=seed, dataset=dataset,
-                               run_name=run_name,
-                               patience=patience, epochs=epochs,
-                               batch_size=batch_size, ))
+        mlflow.log_params(dict(
+            seed=seed, dataset=dataset, run_name=run_name, fold=fold,
+            patience=patience, epochs=epochs, batch_size=batch_size
+        ))
 
         datasplit = load_dataset_split(dataset, n_splits=5, seed=seed, fold=fold)
         model = make_model(datasplit.x_train.shape[1:])
 
+        history = None
         try:
-            history = fit(model=model,
-                          datasplit=datasplit,
-                          run_name=run_name,
-                          epochs=epochs,
-                          batch_size=batch_size,
-                          patience=patience,
-                          verbose=verbose,
-                          )
+            history = fit(
+                model=model,
+                datasplit=datasplit,
+                run_name=run_name,
+                epochs=epochs,
+                batch_size=batch_size,
+                patience=patience,
+                verbose=verbose,
+            )
         except KeyboardInterrupt:
-            pass
+            print("\n Training interrupted by user (KeyboardInterrupt).")
+            print("Continuing with evaluation using the current/best available weights...")
+
+        # If we have a saved best model, prefer it for evaluation
+        if chkpoint.exists():
+            try:
+                model = keras.models.load_model(chkpoint)
+                print(f"Loaded best checkpoint: {chkpoint}")
+            except Exception as e:
+                print(f"Could not load checkpoint at {chkpoint}: {e}")
 
         # -------------------
-        # Plot Training History
+        # Plot Training History (only if we have it)
         # -------------------
-        plt.figure(figsize=(12, 5))
+        if history is not None:
+            plt.figure(figsize=(12, 5))
 
-        # Subplot 1: Loss
-        plt.subplot(1, 2, 1)
-        plt.plot(history.history['loss'], label='Training Loss')
-        if 'val_loss' in history.history:
-            plt.plot(history.history['val_loss'], label='Validation Loss')
-        plt.title('Model Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
+            # Loss
+            plt.subplot(1, 2, 1)
+            plt.plot(history.history.get('loss', []), label='Training Loss')
+            if 'val_loss' in history.history:
+                plt.plot(history.history['val_loss'], label='Validation Loss')
+            plt.title('Model Loss')
+            plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
 
-        # Subplot 2: Accuracy (if available)
-        if 'accuracy' in history.history or 'val_accuracy' in history.history:
-            plt.subplot(1, 2, 2)
-            if 'accuracy' in history.history:
-                plt.plot(history.history['accuracy'], label='Training Accuracy')
-            if 'val_accuracy' in history.history:
-                plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-            plt.title('Model Accuracy')
-            plt.xlabel('Epoch')
-            plt.ylabel('Accuracy')
-            plt.legend()
+            # Accuracy (handle both 'acc' and 'accuracy' naming)
+            acc_key = 'accuracy' if 'accuracy' in history.history else ('acc' if 'acc' in history.history else None)
+            val_acc_key = 'val_accuracy' if 'val_accuracy' in history.history else ('val_acc' if 'val_acc' in history.history else None)
 
-        plt.suptitle('Training History', fontsize=16, weight='bold')
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        plt.show()
+            if acc_key or val_acc_key:
+                plt.subplot(1, 2, 2)
+                if acc_key:
+                    plt.plot(history.history[acc_key], label='Training Accuracy')
+                if val_acc_key:
+                    plt.plot(history.history[val_acc_key], label='Validation Accuracy')
+                plt.title('Model Accuracy')
+                plt.xlabel('Epoch'); plt.ylabel('Accuracy'); plt.legend()
 
-        # --- Predictions on test split ---
-        y_pred_prob = model.predict(datasplit.x_test).astype('float32')
+            plt.suptitle('Training History', fontsize=16, weight='bold')
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            plt.show()
+
+        # -------------------
+        # Evaluation (always run)
+        # -------------------
+        y_pred_prob = model.predict(datasplit.x_test).astype('float32').flatten()
         y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
-        # --- Confusion matrix ---
         cm = confusion_matrix(datasplit.y_test, y_pred_bin)
         print("\nConfusion Matrix:")
         print(cm)
 
-        # --- Metrics ---
         acc = accuracy_score(datasplit.y_test, y_pred_bin)
         mcc = matthews_corrcoef(datasplit.y_test, y_pred_bin)
 
         print(f"\nAccuracy: {acc:.4f}")
         print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
 
-        # --- Log to MLflow ---
-        mlflow.log_metrics({
-            'accuracy': acc,
-            'mcc': mcc,
-            'val_loss_best': min(history.history['val_loss']),
-        })
+        # Log what we safely can
+        metrics_to_log = {'accuracy': acc, 'mcc': mcc}
+        if history is not None and 'val_loss' in history.history:
+            try:
+                metrics_to_log['val_loss_best'] = float(np.min(history.history['val_loss']))
+            except Exception:
+                pass
+        mlflow.log_metrics(metrics_to_log)
 
-        # --- Save model to MLflow ---
+        # Save model to MLflow (use the checkpointed/best model if loaded)
         signature = mlflow.models.infer_signature(
             datasplit.x_train[:4],
             model.predict(datasplit.x_train[:4])
         )
         mlflow.keras.log_model(model, run_name, signature=signature)
+
 
 @app.command()
 def evaluate(model_uri: str,
@@ -1200,40 +1219,63 @@ def predict_labeled(model_uri: str,
     print(f"\nPredictions saved to: {output_tsv}")
 
     # -------------------
-    # Visualization
+    # Visualization (2×2 with metrics panel)
     # -------------------
-    fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+    # counts per class for the summary text
+    total_traces = len(y_true)
+    counts_per_class = "\n".join(
+        f"{name}: {int(np.sum(y_true == i))}" for i, name in enumerate(target_names)
+    )
+
+    fig, ax = plt.subplots(2, 2, figsize=(10, 8))
 
     # Confusion Matrix
     ConfusionMatrixDisplay.from_predictions(
-        y_true, y_pred_bin, ax=ax[0], cmap="viridis",
-        colorbar=False, display_labels=target_names, normalize="true"
+        y_true, y_pred_bin, ax=ax[0, 0], cmap="viridis",
+        colorbar=True, display_labels=target_names, normalize="true"
     )
-    ax[0].set_title("Confusion Matrix")
+    ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
     # ROC Curve
     fpr, tpr, _ = roc_curve(y_true, y_pred_prob)
-    ax[1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
-    ax[1].plot([0, 1], [0, 1], linestyle="--", color="gray")
-    ax[1].set_title("ROC Curve")
-    ax[1].set_xlabel("False Positive Rate")
-    ax[1].set_ylabel("True Positive Rate")
-    ax[1].legend(loc="lower right")
+    ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
+    ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
+    ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
+    ax[0, 1].set_xlabel("False Positive Rate")
+    ax[0, 1].set_ylabel("True Positive Rate")
+    ax[0, 1].set_xlim(0, 1)
+    ax[0, 1].set_ylim(0, 1)
+    ax[0, 1].legend(loc="lower right")
 
     # Precision–Recall Curve
     precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
     baseline = np.mean(y_true)
-    ax[2].plot(recall, precision, label=f"AP = {ap_score:.4f}")
-    ax[2].hlines(baseline, xmin=0, xmax=1, color="gray", linestyle="--",
-                 label=f"Baseline = {baseline:.2f}")
-    ax[2].set_title("Precision–Recall Curve")
-    ax[2].set_xlabel("Recall")
-    ax[2].set_ylabel("Precision")
-    ax[2].legend(loc="lower left")
+    ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
+    ax[1, 0].hlines(baseline, xmin=0, xmax=1, color="gray", linestyle="--",
+                    label=f"Baseline = {baseline:.2f}")
+    ax[1, 0].set_title("Precision–Recall Curve", fontsize=14, pad=15)
+    ax[1, 0].set_xlabel("Recall")
+    ax[1, 0].set_ylabel("Precision")
+    ax[1, 0].set_xlim(0, 1)
+    ax[1, 0].set_ylim(0, 1)
+    ax[1, 0].legend(loc="lower left")
 
-    plt.suptitle("Prediction Evaluation Report", fontsize=16, weight="bold")
-    plt.tight_layout()
+    # Metrics summary box (Accuracy, MCC, Classification Report)
+    metrics_text = (
+        f"Total traces: {total_traces}\n"
+        f"{counts_per_class}\n\n"
+        f"Accuracy: {acc:.4f}\n"
+        f"MCC: {mcc:.4f}\n\n"
+        f"Classification Report:\n{class_report}"
+    )
+    ax[1, 1].axis("off")
+    ax[1, 1].text(0, 1, metrics_text, ha="left", va="top",
+                  family="monospace", fontsize=11)
+
+    fig.tight_layout(rect=[0, 0.05, 1, 0.95])
+    plt.suptitle("Prediction Evaluation Report", fontsize=20, weight="bold")
     plt.show()
+
 
 @app.command()
 def predict_unlabeled(model_uri: str,
@@ -1244,13 +1286,9 @@ def predict_unlabeled(model_uri: str,
     Predict on an unlabeled dataset formatted as:
     trace, time_0, time_10, ..., time_600
 
-    Args:
-        model_uri (str): Path or URI to the trained model (MLflow or .keras)
-        data_tsv (Path): Path to unlabeled dataset (TSV)
-        output_tsv (Path): Path where predictions will be saved
-        threshold (float): Probability cutoff for binary classification (default=0.5)
+    Loads data the same way as predict_labeled (path fallback to repo_dir/data).
+    Plots histogram of predicted probabilities with viridis colormap.
     """
-    import warnings
 
     # -------------------
     # Load model
@@ -1259,27 +1297,34 @@ def predict_unlabeled(model_uri: str,
     model = mlflow.keras.load_model(model_uri)
 
     # -------------------
-    # Load data
+    # Load data (same style as predict_labeled)
     # -------------------
-    print(f"Loading unlabeled dataset from: {data_tsv}")
-    data = pd.read_csv(data_tsv, sep="\t")
+    dataset_path = Path(data_tsv)
+    if not dataset_path.exists():
+        candidate = repo_dir / 'data' / dataset_path.name
+        if candidate.exists():
+            dataset_path = candidate
+        else:
+            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    # Check first column
-    if "trace" not in data.columns:
-        raise ValueError("Input TSV must contain a 'trace' column as the first column.")
+    print(f"Loading unlabeled dataset from: {dataset_path}")
+    data = pd.read_csv(dataset_path, sep="\t")
+
+    # Expect first column: trace
+    if "trace" not in data.columns[:1].tolist():
+        raise ValueError(
+            "Input TSV must contain a 'trace' column as the first column."
+        )
 
     # Extract trace identifiers
     traces = data["trace"].astype(str)
 
     # Extract numeric features (all columns after 'trace')
-    x_data = data.drop(columns=["trace"]).values[:, :, np.newaxis]
+    feature_cols = data.columns[1:]
+    if len(feature_cols) == 0:
+        raise ValueError("No timepoint columns found after 'trace'.")
 
-    # Warn if suspicious number of timepoints
-    if x_data.shape[1] in [61, 63]:
-        warnings.warn(
-            f"Dataset has {x_data.shape[1]} timepoints — double-check preprocessing.",
-            RuntimeWarning,
-        )
+    x_data = data.loc[:, feature_cols].values[:, :, np.newaxis]
 
     # -------------------
     # Run predictions
@@ -1307,11 +1352,18 @@ def predict_unlabeled(model_uri: str,
     print(f"\nPredictions saved to: {output_tsv}")
 
     # -------------------
-    # Plot probability distribution
+    # Probability histogram (viridis colormap)
     # -------------------
     plt.figure(figsize=(6, 4))
-    plt.hist(y_pred_prob, bins=30, color="skyblue", edgecolor="black")
-    plt.axvline(threshold, color="red", linestyle="--", label=f"Threshold = {threshold}")
+    counts, bins, patches = plt.hist(y_pred_prob, bins=30)
+    # Color each bar by its height using viridis
+    norm = mcolors.Normalize(vmin=counts.min() if counts.size else 0,
+                             vmax=counts.max() if counts.size else 1)
+    cmap = cm.get_cmap("viridis")
+    for c, p in zip(counts, patches):
+        p.set_facecolor(cmap(norm(c)))
+    # Threshold line
+    plt.axvline(threshold, linestyle="--", label=f"Threshold = {threshold}")
     plt.title("Distribution of Predicted Probabilities")
     plt.xlabel("Predicted Probability (PR8 class)")
     plt.ylabel("Count")
