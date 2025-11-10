@@ -1,17 +1,14 @@
 from pathlib import Path
-
+import tensorflow as tf
 import mlflow
 import keras
-
 import pandas as pd
 import numpy as np
+import typer
 
 from IAV_Classification.utils import repo_dir, set_seeds
 from IAV_Classification.data import DataSplit, load_dataset_split
-
 from IAV_Classification.model import make_model, monte_carlo_predict_samples
-
-import typer
 
 from sklearn.metrics import (
     roc_curve, roc_auc_score,
@@ -27,7 +24,6 @@ from matplotlib.colors import Normalize
 from scipy.stats import wasserstein_distance
 
 app = typer.Typer()
-
 
 def fit(model: keras.Model,
         datasplit: DataSplit,
@@ -1281,13 +1277,7 @@ def predict_unlabeled(model_uri: str,
     print(f"\nPredictions saved to: {preds_path}")
     print("Class mapping in TSV: y_pred_bin → 1=PR8, 0=X31")
 
-    # -------------------
     # Probability histogram (viridis gradient, no borders)
-    # -------------------
-    # Local imports so this func is self-contained
-    from matplotlib import colors as mcolors
-    from matplotlib import cm
-
     fig = plt.figure(figsize=(6, 4))
     counts, bins, patches = plt.hist(y_pred_prob, bins=30, edgecolor='none')  # no borders
     norm = mcolors.Normalize(vmin=counts.min() if counts.size else 0,
@@ -1307,6 +1297,339 @@ def predict_unlabeled(model_uri: str,
     plt.tight_layout()
 
     # Save and show
+    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    print(f"[saved] {plot_path}")
+    plt.show()
+    plt.close(fig)
+
+
+@app.command()
+def predict_labeled_model(
+    model_path: Path,
+    dataset: Path,
+    threshold: float = 0.5
+) -> None:
+    """
+    Predict on a labeled dataset formatted as:
+    label, video, trace, time_0, time_10, ..., time_600
+
+    Saves a standardized TSV where class mapping is enforced:
+      y_true=1 -> PR8, y_true=0 -> X31
+      predicted_label=1 -> PR8, predicted_label=0 -> X31
+    Also saves a 2x2 evaluation plot.
+
+    Args:
+        model_path (Path): Path to the trained Keras model (.keras file or SavedModel folder)
+        dataset (Path): Path to labeled dataset (TSV)
+        threshold (float): Probability cutoff for binary classification (default=0.5)
+    """
+
+    # -------------------
+    # Load model
+    # -------------------
+    mp = Path(model_path)
+    if not mp.exists():
+        candidate = repo_dir / "models" / mp.name
+        if candidate.exists():
+            mp = candidate
+        else:
+            raise FileNotFoundError(f"Model not found: {model_path} (also checked {candidate})")
+
+    print(f"Loading model from local path: {mp}")
+    try:
+        model = tf.keras.models.load_model(mp)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Keras model from {mp}: {e}")
+
+    # -------------------
+    # Load data
+    # -------------------
+    dataset_path = Path(dataset)
+    if not dataset_path.exists():
+        candidate = repo_dir / "data" / dataset_path.name
+        if candidate.exists():
+            dataset_path = candidate
+        else:
+            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+
+    data = pd.read_csv(dataset_path, sep='\t')
+
+    # Expect first 3 columns: label, video, trace
+    expected_prefix = ["label", "video", "trace"]
+    if not all(c in data.columns[:3].tolist() for c in expected_prefix):
+        raise ValueError(
+            f"The first three columns must be 'label', 'video', 'trace'. Got: {data.columns[:3].tolist()}"
+        )
+
+    # Extract parts
+    labels = data.iloc[:, 0].astype(str)
+    videos = data.iloc[:, 1].astype(str)
+    traces = data.iloc[:, 2].astype(str)
+
+    # Numeric features (from 4th column onward)
+    x_raw = data.iloc[:, 3:].to_numpy(dtype="float32")
+
+    # -------------------
+    # Adjust for expected input length
+    # -------------------
+    expected_len = model.input_shape[1] if len(model.input_shape) > 1 else x_raw.shape[1]
+    current_len = x_raw.shape[1]
+    if current_len > expected_len:
+        print(f"[warn] Truncating from {current_len} to {expected_len} timepoints to match model.")
+        x_raw = x_raw[:, :expected_len]
+    elif current_len < expected_len:
+        print(f"[warn] Padding from {current_len} to {expected_len} timepoints to match model.")
+        pad = expected_len - current_len
+        last = x_raw[:, [-1]]
+        x_raw = np.concatenate([x_raw, np.repeat(last, pad, axis=1)], axis=1)
+
+    x_data = x_raw[:, :, np.newaxis]
+
+    # -------------------
+    # Enforce PR8/X31 schema
+    # -------------------
+    unique_labels = set(labels.unique())
+    if not unique_labels.issubset({"PR8", "X31"}):
+        raise ValueError(
+            f"This function writes a standardized TSV with class mapping 1=PR8, 0=X31, "
+            f"but found other labels: {sorted(unique_labels - {'PR8','X31'})}. "
+            f"Please filter the dataset to only PR8/X31."
+        )
+
+    y_true = np.array([1 if l == "PR8" else 0 for l in labels], dtype=int)
+    target_names = ["X31", "PR8"]
+    idx_to_name = {0: "X31", 1: "PR8"}
+
+    # -------------------
+    # Run predictions
+    # -------------------
+    print("Running predictions...")
+    y_pred_prob = model.predict(x_data).astype("float32").flatten()
+    y_pred_bin = (y_pred_prob > threshold).astype(int)
+
+    # -------------------
+    # Compute metrics
+    # -------------------
+    acc = accuracy_score(y_true, y_pred_bin)
+    mcc = matthews_corrcoef(y_true, y_pred_bin)
+    auc_score = roc_auc_score(y_true, y_pred_prob)
+    ap_score = average_precision_score(y_true, y_pred_prob)
+    class_report = classification_report(y_true, y_pred_bin, target_names=target_names)
+    cm = confusion_matrix(y_true, y_pred_bin)
+
+    # -------------------
+    # Print results
+    # -------------------
+    print("\n================ Prediction Evaluation ================\n")
+    print(f"Accuracy: {acc:.4f}")
+    print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
+    print(f"ROC-AUC: {auc_score:.4f}")
+    print(f"Average Precision (PR-AUC): {ap_score:.4f}")
+    print("\nClassification Report:\n")
+    print(class_report)
+    print("Confusion Matrix:\n", cm)
+
+    # -------------------
+    # Prepare output paths
+    # -------------------
+    output_dir = repo_dir / "IAV_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base_tag = f"{mp.stem}_{dataset_path.stem}_thr{threshold:g}"
+
+    preds_path = output_dir / f"{base_tag}_predictions_model.tsv"
+    plot_path  = output_dir / f"{base_tag}_prediction_report_model.png"
+
+    # -------------------
+    # Save predictions TSV
+    # -------------------
+    pred_df = pd.DataFrame({
+        "label_true_name": labels,
+        "video": videos,
+        "trace": traces,
+        "y_pred_prob": y_pred_prob,
+        "y_true": y_true,
+        "predicted_label": y_pred_bin,
+        "y_true_classname": [idx_to_name[i] for i in y_true],
+        "predicted_classname": [idx_to_name[i] for i in y_pred_bin]
+    })
+    pred_df.to_csv(preds_path, sep="\t", index=False)
+    print(f"\nPredictions saved to: {preds_path}")
+
+    # -------------------
+    # Visualization
+    # -------------------
+    total_traces = len(y_true)
+    counts_per_class = "\n".join(
+        f"{name}: {int(np.sum(y_true == i))}" for i, name in enumerate(target_names)
+    )
+
+    fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+
+    # Confusion Matrix
+    disp = ConfusionMatrixDisplay.from_predictions(
+        y_true, y_pred_bin, ax=ax[0, 0], cmap="viridis",
+        colorbar=True, display_labels=target_names, normalize="true"
+    )
+    try:
+        disp.ax_.images[-1].set_clim(0, 1)
+        cbar = disp.ax_.images[-1].colorbar
+        if cbar:
+            cbar.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    except Exception:
+        pass
+    ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
+
+    # ROC
+    fpr, tpr, _ = roc_curve(y_true, y_pred_prob)
+    ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
+    ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
+    ax[0, 1].set_title("ROC Curve", fontsize=14)
+    ax[0, 1].legend(loc="lower right")
+
+    # PR
+    precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
+    baseline = np.mean(y_true)
+    ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
+    ax[1, 0].hlines(baseline, xmin=0, xmax=1, color="gray", linestyle="--",
+                    label=f"Baseline = {baseline:.2f}")
+    ax[1, 0].set_title("Precision–Recall Curve", fontsize=14)
+    ax[1, 0].legend(loc="lower left")
+
+    # Metrics text
+    metrics_text = (
+        f"Total traces: {total_traces}\n"
+        f"{counts_per_class}\n\n"
+        f"Accuracy: {acc:.4f}\n"
+        f"MCC: {mcc:.4f}\n\n"
+        f"Classification Report:\n{class_report}"
+    )
+    ax[1, 1].axis("off")
+    ax[1, 1].text(0, 1, metrics_text, ha="left", va="top",
+                  family="monospace", fontsize=11)
+
+    plt.suptitle("Prediction Evaluation Report", fontsize=20, weight="bold")
+    fig.tight_layout(rect=[0, 0.05, 1, 0.95])
+    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    print(f"Plot saved to: {plot_path}")
+    plt.show()
+    plt.close(fig)
+
+
+@app.command()
+def predict_unlabeled_model(
+        model_path: Path,
+        data_tsv: Path,
+        threshold: float = 0.5
+) -> None:
+    """
+    Predict on an unlabeled dataset formatted as:
+    trace, time_0, time_10, ..., time_600
+
+    - Saves predictions TSV and histogram PNG to IAV_output/
+    - Histogram uses viridis colormap with no borders
+    - Pred label mapping: 1=PR8, 0=X31
+    """
+
+    # -------------------
+    # Resolve model path
+    # -------------------
+    mp = Path(model_path)
+    if not mp.exists():
+        # Try resolving relative to repo_dir/models
+        candidate = repo_dir / "models" / mp.name
+        if candidate.exists():
+            mp = candidate
+        else:
+            raise FileNotFoundError(f"Model not found: {model_path} (also checked {candidate})")
+
+    print(f"Loading model from local path: {mp}")
+    try:
+        # Works for .keras files and SavedModel directories
+        model = tf.keras.models.load_model(mp)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Keras model from {mp}: {e}")
+
+    # -------------------
+    # Load data
+    # -------------------
+    dataset_path = Path(data_tsv)
+    if not dataset_path.exists():
+        candidate = repo_dir / 'data' / dataset_path.name
+        if candidate.exists():
+            dataset_path = candidate
+        else:
+            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+
+    print(f"Loading unlabeled dataset from: {dataset_path}")
+    data = pd.read_csv(dataset_path, sep="\t")
+
+    # Expect first column: trace
+    if "trace" not in data.columns[:1].tolist():
+        raise ValueError("Input TSV must contain a 'trace' column as the first column.")
+
+    # Extract trace identifiers
+    traces = data["trace"].astype(str)
+
+    # Extract numeric features (all columns after 'trace')
+    feature_cols = data.columns[1:]
+    if len(feature_cols) == 0:
+        raise ValueError("No timepoint columns found after 'trace'.")
+
+    # Shape: (N, T, 1) — add channel dim for 1D convs/RNNs expecting features_last
+    x_data = data.loc[:, feature_cols].values[:, :, np.newaxis].astype("float32")
+
+    # -------------------
+    # Run predictions
+    # -------------------
+    print("Running model predictions...")
+    y_pred_prob = model.predict(x_data).astype("float32").flatten()
+    y_pred_bin = (y_pred_prob > threshold).astype(int)
+
+    # Map 0/1 to class names (1=PR8, 0=X31)
+    idx_to_name = {0: "X31", 1: "PR8"}
+    predicted_classname = np.vectorize(idx_to_name.get)(y_pred_bin)
+
+    # -------------------
+    # Output paths
+    # -------------------
+    output_dir = repo_dir / "IAV_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base_tag = f"{mp.stem}_{dataset_path.stem}_thr{threshold:g}"
+
+    preds_path = output_dir / f"{base_tag}_unlabeled_predictions_model.tsv"
+    plot_path  = output_dir / f"{base_tag}_unlabeled_hist_model.png"
+
+    # -------------------
+    # Save predictions TSV (unlabeled → no true labels/videos)
+    # -------------------
+    pred_df = pd.DataFrame({
+        "trace": traces,
+        "y_pred_prob": y_pred_prob,
+        "y_pred_bin": y_pred_bin,                 # 0/1 where 1=PR8, 0=X31
+        "predicted_classname": predicted_classname  # "PR8"/"X31"
+    })
+    pred_df.to_csv(preds_path, sep="\t", index=False)
+    print(f"\nPredictions saved to: {preds_path}")
+
+    # Probability histogram (viridis gradient, no borders)
+    fig = plt.figure(figsize=(6, 4))
+    counts, bins, patches = plt.hist(y_pred_prob, bins=30, edgecolor='none')  # no borders
+    norm = mcolors.Normalize(vmin=counts.min() if counts.size else 0,
+                             vmax=counts.max() if counts.size else 1)
+    cmap = cm.get_cmap("viridis")
+    for c, p in zip(counts, patches):
+        p.set_facecolor(cmap(norm(c)))
+        p.set_linewidth(0)
+
+    # Threshold line
+    plt.axvline(threshold, linestyle="--", label=f"Threshold = {threshold}")
+
+    plt.title("Distribution of Predicted Probabilities")
+    plt.xlabel("Predicted Probability (PR8 class)")
+    plt.ylabel("Count")
+    plt.legend()
+    plt.tight_layout()
+
     fig.savefig(plot_path, dpi=300, bbox_inches="tight")
     print(f"[saved] {plot_path}")
     plt.show()

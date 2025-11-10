@@ -4,7 +4,7 @@ It integrates robust preprocessing steps (normalization, cleaning, imputation, b
 The project also reproduces and scales the Blinkognition single-molecule pipeline established by Püntener and Rivera-Fuentes to examine how temporal resolution and dataset size affect model stability and performance, and to validate the integration of their certainty-threshold post-analysis.  
 <br>
 
-## Contents
+## 1. Contents
 1. **notebooks**  
     -> 5 Scripts that carry out visualizing and preprocessing steps
 2. **IAV_Classification**  
@@ -13,7 +13,7 @@ The project also reproduces and scales the Blinkognition single-molecule pipelin
     -> Scripts and datasets for reproducing the Püntener & Rivera-Fuentes 'Blinkognition' paper and scaling experiments.  
 <br>
 
-## Installation
+## 2. Installation
 Please install [uv](https://docs.astral.sh/uv/getting-started/features/) if you want to use this code.
 It uses [typer](https://typer.tiangolo.com/) as a command line interface and [MLflow](https://mlflow.org/docs/latest/ml/tracking/quickstart/) for tracking the experiments.
 ```bash
@@ -28,14 +28,15 @@ source .\.venv\Scripts\Activate.ps1
 ```  
 <br>
 
-## Getting started
+## 3. Getting started
+### 3.1 How to run the notebooks
 The preprocessing steps are carried out in the `notebooks` folder. Notebooks included are: 001_Exploring_Dataset, 002_Data_Cleaning, 003_Peak_Feature_Extraction, 004_Püntener_Dataset_processed_traces and 005_XGBoost_and_Feature_Importance. 
 The notebooks can be carried out by opening the notebook (1) and clicking on `Run Section`(2).
 Outputs will be created automatically. Each notebook creates an individual output folder.
 
 ![notebooks.png](images/notebooks.png)
 
-### How to start MLflow
+### 3.2 How to start MLflow
 ![MLflow.png](images/MLflow.png)
 First, open the terminal on the left side of the menu (1).  
 To start the MLflow server it is advised to open another terminal. For this, just click on the "+" and rename the terminal as u wish (2).  
@@ -59,8 +60,8 @@ You can hide runs by clicking on the eye (1) and also change the run color by cl
 By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later functions.  
 <br>
 
-## IAV Classification
-### How to make predictions
+## 4. IAV Classification
+### 4.1 How to make predictions
 If new data is collected, you can use the prediction function to predict the classes of the new collected data.
 Prepare the dataset with `trace` as first column, followed by the time series columns with `time_0`, `time_10`, etc for the first prediction function.
 The first example sets the default threshold at 0.5, while the second example let's you set a threshold.
@@ -84,8 +85,8 @@ uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_K
 A .tsv file will be created in the 'IAV_output folder'  
 <br>
 
-### How to train and evaluate new models
-#### Create a train and test set 
+### 4.2 How to train and evaluate new models
+#### 4.2.1 Create a train and test set 
 To train new models save datasets derived from the preprocessing pipeline in the `data` folder with `class`, `video_ID` and `trace` as first three columns, followed by the time series columns with `time_0`, `time_10`, etc.
 An example is provided below based on the `all_traces.tsv` dataset. 
 ```bash
@@ -102,7 +103,7 @@ The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
 Datasets and splits for all preprocessing techniques are already provided in the `data` folder.  
 <br>
 
-#### Train a model
+#### 4.2.2 Train a model
 The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
 Again, find a suitable class proportion, which could take some tries. Press `Strg`+`c` to stop training, if the class proportions are not suitable and repeat with a different seed and/or fold.
 ```bash
@@ -126,7 +127,7 @@ The `val_mcc` should go up. The higher the mcc, the better the model can disting
 [Source: https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/]  
 <br>
 
-#### Optimize the model
+#### 4.2.3 Optimize the model
 This is also your chance to optimize and change hyperparameters in the `model.py`(IAV_Classification/model.py) file based on the training results.
 You think the model could use less capacity? Lower the number of filters in the kernels
 With the `cross_validate` function you can also see how the model performs with increasing batch sizes or Monte Carlo Dropout.
@@ -160,7 +161,7 @@ Smaller batch sizes (8, 16, 32) usually generalize better, while higher batch si
 ![batch_size.png](images/batch_size.png)  
 <br>
 
-#### Evaluate the model on the validation set
+#### 4.2.4 Evaluate the model on the validation set
 After optimizing the model architecture, the model can be evaluated with this function:
 ```bash
 # Step 4: Evaluate the model
@@ -175,7 +176,7 @@ The ct_threshold sets the minimum confidence level (based on the minimal Wassers
 The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase.  
 <br>
 
-#### Evaluate the model on the test set
+#### 4.2.5 Evaluate the model on the test set
 These next commands work the same way as the `evaluate` function calls, but use the held back test dataset, instead of the validation set.
 ```bash
 # Step 5: Use the held back test file
@@ -185,7 +186,7 @@ uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --data
 ```  
 <br>
 
-#### Make predictions with a new dataset
+#### 4.2.6 Make predictions with a new dataset
 The last step is to make predictions on a new unseen dataset, that is either unlabeled or labeled.
 See more information about predictions in `How to make predictions`.
 ```bash
@@ -202,10 +203,23 @@ uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13
 uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv --threshold 0.6
 ```  
 <br>
+```bash
+# Step 6: Prediction
 
-## Püntener Classification
+# Function 1:
+uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv
+# or
+uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv --threshold 0.6
+
+# Function 2:
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv
+# or
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
+``` 
+
+## 5. Püntener Classification
 This classification is a shorter pipeline, as this was only used for scaling and reproduction experiments. It does not include `test` or `prediction` functions.
-#### Create a train and test set
+#### 5.1 Create a train and test set
 To train new models save the created dataset derived from notebook `004_Püntener_Dataset_processed_traces` in the `data_blinko` folder.
 An example is provided below based on the `E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv` dataset. 
 ```bash
@@ -216,7 +230,7 @@ The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
 This dataset and the splits are already provided in the `data_blinko` folder.  
 <br>
 
-#### Train a model
+#### 5.2 Train a model
 The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
 ```bash
 # Step 2: Train the model
@@ -230,7 +244,7 @@ uv run blinko-app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61
 Either train the model on a basesline architecture or the Püntener architecture. Changes in the model architecture can be carried out in the `ml.py` script in the `blinkognition` folder.  
 <br>
 
-#### Evaluate the model on the validation set
+#### 5.3 Evaluate the model on the validation set
 After choosing a model architecture, the model can be evaluated with this function:
 ```bash
 # Step 3: Evaluate the model
@@ -246,5 +260,5 @@ The post-processing evaluation will provide you with an evaluation report, a ct-
 The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase.  
 <br>
 
-## References
-add link to a paper if one exists
+## 6. References
+Provide a reference to the associated publication, if one exists.
