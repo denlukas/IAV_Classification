@@ -1,7 +1,8 @@
 # IAV Classification
 The IAV Classification project is a machine learning–based time-series pipeline for classifying strain-specific clathrin-mediated endocytosis dynamics of Influenza A (PR8 vs X31) from TIRF-derived fluorescence traces.
 It integrates robust preprocessing steps (normalization, cleaning, imputation, background subtraction) with a Keras 1D-CNN and Monte Carlo Dropout for uncertainty estimation, followed by a certainty-threshold post-analysis using the minimal Wasserstein distance. 
-The project also reproduces and scales the Blinkognition single-molecule pipeline established by Püntener and Rivera-Fuentes to examine how temporal resolution and dataset size affect model stability and performance, and to validate the integration of their certainty-threshold post-analysis.
+The project also reproduces and scales the Blinkognition single-molecule pipeline established by Püntener and Rivera-Fuentes to examine how temporal resolution and dataset size affect model stability and performance, and to validate the integration of their certainty-threshold post-analysis.  
+<br>
 
 ## Contents
 1. **notebooks**  
@@ -9,7 +10,8 @@ The project also reproduces and scales the Blinkognition single-molecule pipelin
 2. **IAV_Classification**  
     -> Classical ML. Dataset Split, Augmentation, Train, Evaluation, Test and Prediction
 3. **blinkognition**  
-    -> Scripts and datasets for reproducing the Püntener & Rivera-Fuentes 'Blinkognition' paper and scaling experiments.
+    -> Scripts and datasets for reproducing the Püntener & Rivera-Fuentes 'Blinkognition' paper and scaling experiments.  
+<br>
 
 ## Installation
 Please install [uv](https://docs.astral.sh/uv/getting-started/features/) if you want to use this code.
@@ -23,7 +25,8 @@ cd IAV_Classification
 uv sync
 #activate the environment
 source .\.venv\Scripts\Activate.ps1
-```
+```  
+<br>
 
 ## Getting started
 The preprocessing steps are carried out in the `notebooks` folder. Notebooks included are: 001_Exploring_Dataset, 002_Data_Cleaning, 003_Peak_Feature_Extraction, 004_Püntener_Dataset_processed_traces and 005_XGBoost_and_Feature_Importance. 
@@ -53,7 +56,8 @@ It is advised to pin loss, val_loss and val_mcc on top, as they are the most imp
 You can hide runs by clicking on the eye (1) and also change the run color by clicking on the colored circle (2).
 
 ![MLflow_model.png](images/MLflow_model.png)
-By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later functions.
+By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later functions.  
+<br>
 
 ## IAV Classification
 ### How to make predictions
@@ -77,7 +81,8 @@ uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_K
 # or
 uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv --threshold 0.6
 ```
-A .tsv file will be created in the 'IAV_output folder'
+A .tsv file will be created in the 'IAV_output folder'  
+<br>
 
 ### How to train and evaluate new models
 #### Create a train and test set 
@@ -94,7 +99,8 @@ To find a suitable fold it could take some tries by changing the seeds and folds
 If the dataset exhibits an 1:2 class proportion choose a train/test split that exhibits an 1:2 proportion. 
 If the dataset exhibits an 1:1 class proportion choose a train/test split that exhibits an 1:1 proportion.
 The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
-Datasets and splits for all preprocessing techniques are already provided in the `data` folder.
+Datasets and splits for all preprocessing techniques are already provided in the `data` folder.  
+<br>
 
 #### Train a model
 The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
@@ -117,7 +123,8 @@ A corresponding decrease in validation loss suggests that this learned knowledge
 The `val_mcc` should go up. The higher the mcc, the better the model can distinguish between the classes. 
 
 ![overfitting-and-underfitting.png](images/overfitting-and-underfitting.png)
-[Source: https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/]
+[Source: https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/]  
+<br>
 
 #### Optimize the model
 This is also your chance to optimize and change hyperparameters in the `model.py`(IAV_Classification/model.py) file based on the training results.
@@ -150,7 +157,8 @@ Calling `n-jobs 8` & `n-folds 8` means that 8 runs are running at the same time,
 Setting `n-folds 4` for example creates 4 batch sizes (8, 16, 32 and 64,). Usually lower batch sizes will take longer to train the model (orange lines), as each update per epoche sees only a small subset of data, while higher batch sizes will train models faster (purple lines), as each update sees a high subset of data.
 Smaller batch sizes (8, 16, 32) usually generalize better, while higher batch sizes (512, 1024, 2048) do not generalize that well.
 
-![batch_size.png](images/batch_size.png)
+![batch_size.png](images/batch_size.png)  
+<br>
 
 #### Evaluate the model on the validation set
 After optimizing the model architecture, the model can be evaluated with this function:
@@ -164,7 +172,8 @@ uv run app ml evaluate runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --
 There are two different calls. The first call evaluates the model without a post-processing pipeline, while the second call includes a post-processing pipeline.
 The post-processing evaluation will provide you with an evaluation report, a ct-thresholding report, a Wasserstein distance plot, an ECDF of class fractions, a barplot of the class fractions and 4 post-processing reports with higher getting CTs.
 The ct_threshold sets the minimum confidence level (based on the minimal Wasserstein distance from Monte Carlo predictions) above which samples are kept for evaluation, filtering out uncertain predictions.
-The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase. 
+The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase.  
+<br>
 
 #### Evaluate the model on the test set
 These next commands work the same way as the `evaluate` function calls, but use the held back test dataset, instead of the validation set.
@@ -173,7 +182,8 @@ These next commands work the same way as the `evaluate` function calls, but use 
 uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_test.tsv --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
 # or
 uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_test.tsv --ct-threshold 0.1
-```
+```  
+<br>
 
 #### Make predictions with a new dataset
 The last step is to make predictions on a new unseen dataset, that is either unlabeled or labeled.
@@ -190,7 +200,8 @@ uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_K
 uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv 
 # or
 uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv --threshold 0.6
-```
+```  
+<br>
 
 ## Püntener Classification
 This classification is a shorter pipeline, as this was only used for scaling and reproduction experiments. It does not include `test` or `prediction` functions.
@@ -202,7 +213,8 @@ An example is provided below based on the `E1_E2_zscored_filtered_traces_dataset
 uv run blinko-app data create-test-set E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv --seed 42 --no-augment
 ```
 The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
-This dataset and the splits are already provided in the `data_blinko` folder.
+This dataset and the splits are already provided in the `data_blinko` folder.  
+<br>
 
 #### Train a model
 The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
@@ -215,7 +227,8 @@ uv run blinko-app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61
 # Now you can monitor the training and validation of the train file on MLflow
 # --patience 0 means that early stopping is deactivated and the training will last 1000 epochs
 ```
-Either train the model on a basesline architecture or the Püntener architecture. Changes in the model architecture can be carried out in the `ml.py` script in the `blinkognition` folder.
+Either train the model on a basesline architecture or the Püntener architecture. Changes in the model architecture can be carried out in the `ml.py` script in the `blinkognition` folder.  
+<br>
 
 #### Evaluate the model on the validation set
 After choosing a model architecture, the model can be evaluated with this function:
@@ -230,7 +243,8 @@ uv run blinko-app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_
 ```
 There are two different calls. The first call evaluates the model without a post-processing pipeline, while the second call includes a post-processing pipeline.
 The post-processing evaluation will provide you with an evaluation report, a ct-thresholding report, a Wasserstein distance plot, an ECDF of class fractions, a barplot of the class fractions and 4 post-processing reports with higher getting CTs.
-The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase. 
+The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase.  
+<br>
 
 ## References
 add link to a paper if one exists
