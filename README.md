@@ -30,7 +30,7 @@ source .\.venv\Scripts\Activate.ps1
 
 ## 3. Getting started
 ### 3.1 How to run the notebooks
-The preprocessing steps are carried out in the `notebooks` folder. Notebooks included are: 001_Exploring_Dataset, 002_Data_Cleaning, 003_Peak_Feature_Extraction, 004_Püntener_Dataset_processed_traces and 005_XGBoost_and_Feature_Importance. 
+The preprocessing steps are carried out in the `notebooks` folder. Notebooks included are: `001_Exploring_Dataset`, `002_Data_Cleaning`, `003_Peak_Feature_Extraction`, `004_Püntener_Dataset_processed_traces` and `005_XGBoost_and_Feature_Importance`. 
 The notebooks can be carried out by opening the notebook (1) and clicking on `Run Section`(2).
 Outputs will be created automatically. Each notebook creates an individual output folder.
 
@@ -47,7 +47,7 @@ mlflow server --host 127.0.0.1 --port 8080 --serve-artifacts
 Click on the link that is provided and you will be forwarded to the MLflow Webinterface (3).  
 
 ![MLflow_Webinterface.png](images/MLflow_Webinterface.png)
-You will see a list of experiments (usually iav_classification, blinkognition and Default). Choose infa and in the next step click on chart interface (1).  
+You will see a list of experiments (if you already run a train function, otherwise only `Default` will appear as experiment). Choose infa and in the next step click on chart interface (1).  
 For better overview in these charts you can select "settings" (2) and set the line smoothing to 70 (3), so the lines look more stable and clear.  
 In the chart interface you will see all runs and charts for the training and validation metrics, such as loss, val_loss and val_mcc. 
 You can drag the metric windows up and down by clicking on the six dots (4).
@@ -57,14 +57,15 @@ It is advised to pin loss, val_loss and val_mcc on top, as they are the most imp
 You can hide runs by clicking on the eye (1) and also change the run color by clicking on the colored circle (2).
 
 ![MLflow_model.png](images/MLflow_model.png)
-By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later functions.  
+By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later `evaluation`, `test` and `prediction` functions.  
 <br>
 
 ## 4. IAV Classification
 ### 4.1 How to make predictions
-If new data is collected, you can use the prediction function to predict the classes of the new collected data.
+If new data is collected, you can use the prediction function to predict the classes of the new collected data with the best performing model that was generated in this project.
 Prepare the dataset with `trace` as first column, followed by the time series columns with `time_0`, `time_10`, etc for the first prediction function.
-The first example sets the default threshold at 0.5, while the second example let's you set a threshold.
+Make sure that the dataset has 60 time points, as the provided model was trained on 60 time points.
+The first example sets a default threshold at 0.5, while the second example let's you set a threshold.
 The threshold is the decision cutoff used to convert probabilities into binary predictions. It determines how confident the model must be before calling a sample “PR8” instead of “X31.”
 A threshold of e.g. 0.6 means that the model must be at least 60% confident that a sample belongs to the PR8 class before labeling it as PR8. 
 Any prediction with a probability ≤ 0.6 will instead be labeled as X31.
@@ -82,7 +83,7 @@ uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_mod
 # or
 uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
 ```
-A .tsv file will be created in the 'IAV_output folder', where you can analyze the prediction probabilities. Furthermore it creates either a prediction probability histogram or an prediction evaluation report.
+A .tsv file will be created in the `IAV_output` folder, where you can analyze the prediction probabilities. Furthermore it creates either a prediction probability histogram or an prediction evaluation report.
 <br>
 
 ### 4.2 How to train and evaluate new models
@@ -98,7 +99,7 @@ uv run app data create-test-set all_traces_norm_imputation_without_background.ts
 A Stratified Group K-fold is plotted so you can choose which fold fits the best to the class proportions in the dataset.
 To find a suitable fold it could take some tries by changing the seeds and folds.  
 If the dataset exhibits an 1:2 class proportion choose a train/test split that exhibits an 1:2 proportion. 
-If the dataset exhibits an 1:1 class proportion choose a train/test split that exhibits an 1:1 proportion.
+If the dataset exhibits an 1:1 class proportion choose a train/test split that exhibits an 1:1 proportion.  
 The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
 Datasets and splits for all preprocessing techniques are already provided in the `data` folder.  
 <br>
@@ -124,12 +125,13 @@ A corresponding decrease in validation loss suggests that this learned knowledge
 The `val_mcc` should go up. The higher the mcc, the better the model can distinguish between the classes. 
 
 ![overfitting-and-underfitting.png](images/overfitting-and-underfitting.png)
-[Source: https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/]  
+[https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/](https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/)  
 <br>
 
 #### 4.2.3 Optimize the model
 This is also your chance to optimize and change hyperparameters in the `model.py`(IAV_Classification/model.py) file based on the training results.
-You think the model could use less capacity? Lower the number of filters in the kernels
+You think the model could use less capacity? Lower the number of filters in the kernels.  
+
 With the `cross_validate` function you can also see how the model performs with increasing batch sizes or Monte Carlo Dropout.
 To monitor the performance of models with increasing mcd values check if the `cv.py` file looks like this:
 ![cv_mcd.png](images/cv_mcd.png)
