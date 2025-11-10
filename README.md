@@ -26,6 +26,7 @@ source .\.venv\Scripts\Activate.ps1
 ## Getting started
 The preprocessing steps are carried out in the `notebooks` folder. Notebooks included are: 001_Exploring_Dataset, 002_Data_Cleaning, 003_Peak_Feature_Extraction, 004_Püntener_Dataset_processed_traces and 005_XGBoost_and_Feature_Importance. 
 The notebooks can be carried out by opening the notebook (1) and clicking on `Run Section`(2).
+Outputs will be created automatically. Each notebook creates an individual output folder.
 
 ![notebooks.png](images/notebooks.png)
 
@@ -52,6 +53,7 @@ You can hide runs by clicking on the eye (1) and also change the run color by cl
 ![MLflow_model.png](images/MLflow_model.png)
 By clicking on a specific run you will get information about this model, such as the Run ID (1), which is important for later functions.
 
+## IAV Classification
 ### How to make predictions
 If new data is collected, you can use the prediction function to predict the classes of the new collected data.
 Prepare the dataset with `trace` as first column, followed by the time series columns with `time_0`, `time_10`, etc for the first prediction function.
@@ -76,8 +78,9 @@ uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_K
 A .tsv file will be created in the 'IAV_output folder'
 
 ### How to train and evaluate new models
-To train new models save a dataset in the `data` folder with `class`, `video_ID` and `trace` as first three columns, followed by the time series columns with `time_0`, `time_10`, etc.
-An example is provided below based on the all_traces.tsv dataset. 
+#### Create a train and test set 
+To train new models save datasets derived from the preprocessing pipeline in the `data` folder with `class`, `video_ID` and `trace` as first three columns, followed by the time series columns with `time_0`, `time_10`, etc.
+An example is provided below based on the `all_traces.tsv` dataset. 
 ```bash
 # Step 1: Create train and test set
 uv run app data create-test-set all_traces_norm_imputation_without_background.tsv --seed 132 --fold 4
@@ -89,8 +92,10 @@ To find a suitable fold it could take some tries by changing the seeds and folds
 If the dataset exhibits an 1:2 class proportion choose a train/test split that exhibits an 1:2 proportion. 
 If the dataset exhibits an 1:1 class proportion choose a train/test split that exhibits an 1:1 proportion.
 The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
+Datasets and splits for all preprocessing techniques are already provided in the `data` folder.
 
-Te next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
+#### Train a model
+The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
 Again, find a suitable class proportion, which could take some tries. Press `Strg`+`c` to stop training, if the class proportions are not suitable and repeat with a different seed and/or fold.
 ```bash
 # Step 2: Train the model
@@ -98,7 +103,7 @@ uv run app ml train --dataset all_traces_norm_imputation_without_background_trai
 # or
 uv run app ml train --dataset all_traces_norm_imputation_without_background_train_val.tsv --run-name DIOR_SS13 --seed 132 --fold 4 --patience 0
 # select the created _train_val.tsv file and also provide a run name and use the same seed and fold as during create-test-set
-# Now you monitor the training and validation of the train file on MLflow
+# Now you can monitor the training and validation of the train file on MLflow
 # --patience 0 means that early stopping is deactivated and the training will last 1000 epochs
 ```
 During training it is important to choose a model that generalizes well on the validation set.
@@ -112,6 +117,7 @@ The `val_mcc` should go up. The higher the mcc, the better the model can disting
 ![overfitting-and-underfitting.png](images/overfitting-and-underfitting.png)
 [Source: https://vitalflux.com/overfitting-underfitting-concepts-interview-questions/]
 
+#### Optimize the model
 This is also your chance to optimize and change hyperparameters in the `model.py`(IAV_Classification/model.py) file based on the training results.
 You think the model could use less capacity? Lower the number of filters in the kernels
 With the `cross_validate` function you can also see how the model performs with increasing batch sizes or Monte Carlo Dropout.
@@ -144,29 +150,32 @@ Smaller batch sizes (8, 16, 32) usually generalize better, while higher batch si
 
 ![batch_size.png](images/batch_size.png)
 
+#### Evaluate the model on the validation set
 After optimizing the model architecture, the model can be evaluated with this function:
 ```bash
 # Step 4: Evaluate the model
-uv run app ml evaluate runs:/8bea29fda5cf4f1a81e489e6d1b108f8/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_train_val.tsv --seed 132 --fold 4
+# insert the Run ID and run name of the model derived from the MLflow webinterface here
+uv run app ml evaluate runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_train_val.tsv --seed 132 --fold 4 --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
 # or
 uv run app ml evaluate runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_train_val.tsv --seed 132 --fold 4 --ct-threshold 0.1
-# insert the Run ID and run name of the model here
-# the first command will create an evaluation report including a confusion matrix, ROC and PR curves and a classification report
-# by adding --ct-threshold to the second code it creates an evaluation and post-processing evaluation report.
 ```
 There are two different calls. The first call evaluates the model without a post-processing pipeline, while the second call includes a post-processing pipeline.
 The post-processing evaluation will provide you with an evaluation report, a ct-thresholding report, a Wasserstein distance plot, an ECDF of class fractions, a barplot of the class fractions and 4 post-processing reports with higher getting CTs.
+The ct_threshold sets the minimum confidence level (based on the minimal Wasserstein distance from Monte Carlo predictions) above which samples are kept for evaluation, filtering out uncertain predictions.
 The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase. 
 
-These next commands work the same way as the `evaluate` calls, but use the held back test dataset.
+#### Evaluate the model on the test set
+These next commands work the same way as the `evaluate` function calls, but use the held back test dataset, instead of the validation set.
 ```bash
 # Step 5: Use the held back test file
-uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_test.tsv
+uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_test.tsv --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
 # or
 uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --dataset all_traces_norm_imputation_without_background_test.tsv --ct-threshold 0.1
 ```
 
-
+#### Make predictions with a new dataset
+The last step is to make predictions on a new unseen dataset, that is either unlabeled or labeled.
+See more information about predictions in `How to make predictions`.
 ```bash
 # Step 6: Prediction
 
@@ -181,7 +190,44 @@ uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13
 uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv --threshold 0.6
 ```
 
-See `How to make predictions` for the description.
+## Püntener Classification
+#### Create a train and test set
+To train new models save the created dataset derived from notebook `004_Püntener_Dataset_processed_traces` in the `data_blinko` folder.
+An example is provided below based on the `E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv` dataset. 
+```bash
+# Step 1: Create train and test set
+uv run app data create-test-set E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv --seed 42 --no-augment
+```
+The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
+This dataset and the splits are already provided in the `data_blinko` folder.
+
+#### Train a model
+The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
+```bash
+# Step 2: Train the model
+uv run app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42
+# or
+uv run app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42 --patience 0
+# select the created _train_val.tsv file and also provide a run name and use the same seed and fold as during create-test-set
+# Now you can monitor the training and validation of the train file on MLflow
+# --patience 0 means that early stopping is deactivated and the training will last 1000 epochs
+```
+Either train the model on a basesline architecture or the Püntener architecture. Changes in the model architecture can be carried out in the `ml.py` script in the `blinkognition` folder.
+
+#### Evaluate the model on the validation set
+After choosing a model architecture, the model can be evaluated with this function:
+```bash
+# Step 4: Evaluate the model
+uv run app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
+# or
+uv run app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --ct-threshold 0.7
+# insert the Run ID and run name of the model here
+# the first command will create an evaluation report including a confusion matrix, ROC and PR curves and a classification report
+# by adding --ct-threshold to the second code it creates an evaluation and post-processing evaluation report.
+```
+There are two different calls. The first call evaluates the model without a post-processing pipeline, while the second call includes a post-processing pipeline.
+The post-processing evaluation will provide you with an evaluation report, a ct-thresholding report, a Wasserstein distance plot, an ECDF of class fractions, a barplot of the class fractions and 4 post-processing reports with higher getting CTs.
+The number of traces included in the confusion matrices will probably decrease with each CT and the accuracy should (in the best case) increase. 
 
 ## References
 add link to a paper if one exists
