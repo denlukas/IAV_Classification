@@ -1,5 +1,7 @@
 # IAV Classification
-Description (ca. 4 Zeilen)
+The IAV Classification project is a machine learning–based time-series pipeline for classifying strain-specific clathrin-mediated endocytosis dynamics of Influenza A (PR8 vs X31) from TIRF-derived fluorescence traces.
+It integrates robust preprocessing steps (normalization, cleaning, imputation, background subtraction) with a Keras 1D-CNN and Monte Carlo Dropout for uncertainty estimation, followed by a certainty-threshold post-analysis using the minimal Wasserstein distance. 
+The project also reproduces and scales the Blinkognition single-molecule pipeline established by Püntener and Rivera-Fuentes to examine how temporal resolution and dataset size affect model stability and performance, and to validate the integration of their certainty-threshold post-analysis.
 
 ## Contents
 1. **notebooks**  
@@ -191,12 +193,13 @@ uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13
 ```
 
 ## Püntener Classification
+This classification is a shorter pipeline, as this was only used for scaling and reproduction experiments. It does not include `test` or `prediction` functions.
 #### Create a train and test set
 To train new models save the created dataset derived from notebook `004_Püntener_Dataset_processed_traces` in the `data_blinko` folder.
 An example is provided below based on the `E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv` dataset. 
 ```bash
 # Step 1: Create train and test set
-uv run app data create-test-set E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv --seed 42 --no-augment
+uv run blinko-app data create-test-set E1_E2_zscored_filtered_traces_dataset_1x_61TPs.tsv --seed 42 --no-augment
 ```
 The split will generate two files `*_train_val.tsv` and `*_test.tsv`.
 This dataset and the splits are already provided in the `data_blinko` folder.
@@ -205,9 +208,9 @@ This dataset and the splits are already provided in the `data_blinko` folder.
 The next step is to train a model. Load the `*_train_val.tsv` dataset. The train function splits the dataset in train and validation sets.
 ```bash
 # Step 2: Train the model
-uv run app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42
+uv run blinko-app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42
 # or
-uv run app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42 --patience 0
+uv run blinko-app ml train --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --run-name COURRÉGES_FW24 --seed 42 --patience 0
 # select the created _train_val.tsv file and also provide a run name and use the same seed and fold as during create-test-set
 # Now you can monitor the training and validation of the train file on MLflow
 # --patience 0 means that early stopping is deactivated and the training will last 1000 epochs
@@ -217,10 +220,10 @@ Either train the model on a basesline architecture or the Püntener architecture
 #### Evaluate the model on the validation set
 After choosing a model architecture, the model can be evaluated with this function:
 ```bash
-# Step 4: Evaluate the model
-uv run app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
+# Step 3: Evaluate the model
+uv run blinko-app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --no-include-uncertainty --no-use-post-analysis --no-spaced-threshold
 # or
-uv run app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --ct-threshold 0.7
+uv run blinko-app ml evaluate runs:/84bfd63f188943f7a24731955ffb62df/COURRÉGES_FW24 --dataset E1_E2_zscored_filtered_traces_dataset_1x_61TPs_train_val.tsv --seed 42 --ct-threshold 0.7
 # insert the Run ID and run name of the model here
 # the first command will create an evaluation report including a confusion matrix, ROC and PR curves and a classification report
 # by adding --ct-threshold to the second code it creates an evaluation and post-processing evaluation report.

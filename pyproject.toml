@@ -1,7 +1,7 @@
 [project]
 name = "IAV_Classification"
 version = "0.0.1"
-description = "Add your description here"
+description = "ML pipeline for classifying strain-specific clathrin-mediated endocytosis dynamics of Influenza A (PR8 vs X31) from TIRF-derived fluorescence traces, using a Keras 1D-CNN with Monte Carlo Dropout and certainty-threshold post-analysis based on minimal Wasserstein distance. Includes reproduction and scaling of the Blinkognition pipeline by Püntener and Rivera-Fuentes."
 authors = [
     { name = "Dennis Lukas", email = "dennis.lukas@helmholtz-hzi.de" }
 ]
