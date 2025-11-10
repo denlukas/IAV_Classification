@@ -68,21 +68,21 @@ The first example sets the default threshold at 0.5, while the second example le
 The threshold is the decision cutoff used to convert probabilities into binary predictions. It determines how confident the model must be before calling a sample “PR8” instead of “X31.”
 A threshold of e.g. 0.6 means that the model must be at least 60% confident that a sample belongs to the PR8 class before labeling it as PR8. 
 Any prediction with a probability ≤ 0.6 will instead be labeled as X31.
-(Optional) To check how accurate the predictions were, load a labeled dataset with `class`, `video_ID` and `trace` as first three columns, followed by the time series columns with `time_0`, `time_10`, etc.
+(Optional) To check how accurate the predictions were, load the same dataset but label it with `class`, `video_ID` and `trace` as first three columns, followed by the time series columns with `time_0`, `time_10`, etc.
 Save both datasets in the `data` folder.
 You can run the predictions with:
 ```bash
 # Function 1:
-uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv 
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv
 # or
-uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv --threshold 0.6
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
 
 # Function 2:
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv  
 # or
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv --threshold 0.6
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
 ```
-A .tsv file will be created in the 'IAV_output folder'  
+A .tsv file will be created in the 'IAV_output folder', where you can analyze the prediction probabilities. Furthermore it creates either a prediction probability histogram or an prediction evaluation report.
 <br>
 
 ### 4.2 How to train and evaluate new models
@@ -187,34 +187,39 @@ uv run app ml test runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga --data
 <br>
 
 #### 4.2.6 Make predictions with a new dataset
-The last step is to make predictions on a new unseen dataset, that is either unlabeled or labeled.
-See more information about predictions in `How to make predictions`.
+The last step is to make predictions on a new unseen dataset, that is either unlabeled or labeled. 
+The predictions can be executed with either self trained models or a provided model.
+Here you are making predictions on models that you trained yourself. They are called with a model URI and run name.
+More information about the prediction functions are provided in `4.1 How to make predictions`.
 ```bash
-# Step 6: Prediction
-
+# Step 6: Predictions
 # Function 1:
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv
-# or
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv --threshold 0.6
-
-# Function 2:
-uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv 
-# or
-uv run app ml predict-unlabeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_unlabeled.tsv --threshold 0.6
-```  
-<br>
-```bash
-# Step 6: Prediction
-
-# Function 1:
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv
-# or
-uv run app ml predict-labeled runs:/ffa0a5a69ef3495d8efad876a76f1797/DIOR_SS13_Kinga all_traces_labeled.tsv --threshold 0.6
-
-# Function 2:
 uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv
 # or
 uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
+
+# Function 2:
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv  
+# or
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
+```
+MLflow creates models in the `mlmodels` folder. You can copy and paste these models into the `models` folder if you would like to. 
+<br>
+
+Here you are making predictions on models that were provided. They are called with the model name and are stored in the `model` folder.
+The best performing model in this project was `DIOR_SS13_Kinga`, so this is the model that is provided for future predictions.
+Make sure that the new dataset has 60 timepoints, as this model was trained in 60 timepoints.
+```bash
+# (Optional) Step 7: Predictions with provided model
+# Function 1:
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv
+# or
+uv run app ml predict-unlabeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
+
+# Function 2:
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv  
+# or
+uv run app ml predict-labeled-model DIOR_SS13_Kinga.keras all_traces_predict_model.tsv --threshold 0.6 
 ``` 
 
 ## 5. Püntener Classification
