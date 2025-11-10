@@ -7,7 +7,7 @@ from blinkognition.mcc import MatthewsCorrelationCoefficient
 
 import numpy as np
 
-def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
+def make_model(input_shape: tuple[int], mcd:float=0.3) -> keras.Model:
     """
     This function defines a model to process 1D sequential data -- our GFP intensity
     time series. We use dropout as a regularization technique, and Monte Carlo dropout
@@ -19,7 +19,7 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
     # We want to extract local patterns from sequential data, therefore we use convolutions.
     # This layer scans the sequence with 64 pattern detectors (=filters) of width 3, moving
     # 2 steps at a time. ReLU keeps only positive activations to add non-linearity.
-    x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(inputs)
+    x = Conv1D(64, kernel_size=9, strides=2, activation='relu')(inputs)
 
     # This layer normalizes activations to have stable mean and variance. It helps speed up
     # training and reduce overfitting.
@@ -34,19 +34,19 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
     x = MCDropout(mcd)(x)
 
     # These two, we already know from above.
-    x = Conv1D(8, kernel_size=3, strides=2, activation='relu')(x)
-    #x = BatchNormalization()(x)
-    #x = MCDropout(.4)(x)
+    x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(x)
+    x = BatchNormalization()(x)
+    x = MCDropout(.3)(x)
 
     # add third layer
-    #x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(x)
-    #x = BatchNormalization()(x)
+    x = Conv1D(64, kernel_size=3, strides=2, activation='relu')(x)
+    x = BatchNormalization()(x)
     #x = MCDropout(.4)(x)
 
     # A GRU can capture temporal dependencies. We hope that the Conv1Ds learns to detect
     # the GFP peaks, and the GRU learns if the correct time interval passed between them.
-    #x = GRUWithMCDropout(32, return_sequences=True, dropout=.4)(x)
-    x = GRUWithMCDropout(16, dropout=.4)(x)
+    x = GRUWithMCDropout(128, return_sequences=True, dropout=0.05)(x)
+    x = GRUWithMCDropout(256, dropout=0.05)(x)
 
     # This is a fully-connected ('Dense') output layer with one neuron and
     # sigmoid activation, suitable for a binary classification problem like
@@ -65,7 +65,7 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
     # ExponentialDecay. Alternatively, you can use callbacks like ReduceLROnPlateau -- but
     # this would be applied elsewhere, have a look!
     lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate=1e-2,
+        initial_learning_rate=1e-3,
         decay_steps=400,
         decay_rate=0.6)
 
@@ -77,7 +77,7 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
         # predicted probabilities / logits and actually true, binary labels.
         loss=keras.losses.BinaryCrossentropy(),
         metrics=[
-            # which stats do we want to track?
+            # accuracy
             keras.metrics.BinaryAccuracy(name='acc'),
             #  MCC
             MatthewsCorrelationCoefficient(name='mcc'),
@@ -85,11 +85,7 @@ def make_model(input_shape: tuple[int], mcd:float=0.6) -> keras.Model:
             keras.metrics.AUC(name='auc', curve='ROC'),
             #  area under the PR curve
             keras.metrics.AUC(name='auc_pr', curve='PR'),
-            #  a metric corresponding to either of the two following questions, both of which are
-            #  about the predictions with the highest values:
-            #  - Out of the x predictions with the highest value, what share is correct?
-            #  - When we sort the predictions in descending order, what share of the actual positives
-            #    do we find before we find a negative? Think about the more general case of this!
+            # precision ar recall measures how accurate the model’s positive predictions are when it correctly identifies at least 80% of the true positive samples.
             keras.metrics.PrecisionAtRecall(0.8, name='precision_at_recall_0.8')
         ],
     )
@@ -117,9 +113,7 @@ class GRUWithMCDropout(Layer):
         super().build(input_shape)
 
 
-# ----------------------------
 # Monte Carlo Prediction
-# ----------------------------
 def monte_carlo_predict_samples(model, x, n_mc_samples=100):
     """
     Performs multiple stochastic forward passes with MC dropout.

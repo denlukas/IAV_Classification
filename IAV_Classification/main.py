@@ -1,6 +1,5 @@
 import mlflow
 import typer
-from typing import Optional
 
 from IAV_Classification.data import app as data_app
 from IAV_Classification.ml import app as ml_app

@@ -1,23 +1,21 @@
-from pathlib import Path
 import tensorflow as tf
 import mlflow
 import keras
 import pandas as pd
 import numpy as np
 import typer
+import matplotlib.pyplot as plt
 
+from pathlib import Path
 from IAV_Classification.utils import repo_dir, set_seeds
 from IAV_Classification.data import DataSplit, load_dataset_split
 from IAV_Classification.model import make_model, monte_carlo_predict_samples
-
 from sklearn.metrics import (
     roc_curve, roc_auc_score,
     precision_recall_curve, average_precision_score,
     ConfusionMatrixDisplay, classification_report, accuracy_score,
     confusion_matrix, matthews_corrcoef
 )
-
-import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import colors as mcolors
 from matplotlib.colors import Normalize
@@ -110,9 +108,7 @@ def train(
             except Exception as e:
                 print(f"Could not load checkpoint at {chkpoint}: {e}")
 
-        # -------------------
-        # Evaluation (always run)
-        # -------------------
+        # Evaluation
         y_pred_prob = model.predict(datasplit.x_test).astype('float32').flatten()
         y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
@@ -154,10 +150,16 @@ def evaluate(model_uri: str,
              ct_threshold: float = 0,
              spaced_threshold: bool = True
              ) -> None:
+    """
+    Evaluate a trained model on the validation set (*_train_val.tsv).
+    """
+    # Load model
     model = mlflow.keras.load_model(model_uri)
+
+    # Split dataset into train and validation sets
     datasplit = load_dataset_split(dataset, n_splits=5, seed=seed, fold=fold)
 
-    # --- saving helper (only addition) ---
+    # saving helper for output
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{Path(model_uri).stem}_{Path(dataset).stem}_fold{fold}_seed{seed}"
@@ -171,9 +173,7 @@ def evaluate(model_uri: str,
         fig.savefig(path, dpi=300, bbox_inches="tight")
         print(f"[saved] {path}")
 
-    # -------------------
     # Monte Carlo predictions
-    # -------------------
     if include_uncertainty:
         print("Running Monte Carlo prediction...")
         y_pred_prob, probs_try = monte_carlo_predict_samples(
@@ -189,9 +189,7 @@ def evaluate(model_uri: str,
     y_pred_prob = y_pred_prob.flatten()
     y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
-    # -------------------
     # Standard evaluation metrics
-    # -------------------
     acc = accuracy_score(datasplit.y_test, y_pred_bin)
     mcc = matthews_corrcoef(datasplit.y_test, y_pred_bin)
 
@@ -208,9 +206,7 @@ def evaluate(model_uri: str,
     pr8_traces = np.sum(datasplit.y_test == 1)
     x31_traces = np.sum(datasplit.y_test == 0)
 
-    # -------------------
     # Evaluation plots
-    # -------------------
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
     disp = ConfusionMatrixDisplay.from_predictions(
         datasplit.y_test, y_pred_bin, ax=ax[0, 0], cmap="viridis",
@@ -223,7 +219,7 @@ def evaluate(model_uri: str,
         cbar.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
-    # ROC
+    # ROC curve
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -233,7 +229,7 @@ def evaluate(model_uri: str,
     ax[0, 1].set_ylim(0, 1)
     ax[0, 1].legend(loc="lower right")
 
-    # PR
+    # PR curve
     baseline_precision = np.mean(datasplit.y_test)
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
     ax[1, 0].hlines(y=baseline_precision, xmin=0, xmax=1,
@@ -272,9 +268,7 @@ def evaluate(model_uri: str,
     print(f"ROC-AUC: {auc_score:.4f}")
     print(f"Average Precision (PR-AUC): {ap_score:.4f}")
 
-    # -------------------
     # Post-analysis with CT (Wasserstein distance)
-    # -------------------
     if use_post_analysis and include_uncertainty:
         print("\n================ Post-analysis ================\n")
 
@@ -293,11 +287,11 @@ def evaluate(model_uri: str,
                          for c in other_classes), default=0.0)
             list_min_w_distances.append(min_w)
 
-        # --- class mapping ---
+        # class mapping
         idx_to_name = {0: "X31", 1: "PR8"}
         target_names = ["X31", "PR8"]
 
-        # Build a friendly table
+        # Build a table for file output
         post_df = pd.DataFrame({
             "y_true": datasplit.y_test.astype(int),  # 0/1
             "predicted_label": predicted_label.astype(int),  # 0/1
@@ -313,7 +307,7 @@ def evaluate(model_uri: str,
         post_df.to_csv(post_tsv, sep="\t", index=False)
         print(f"[saved] {post_tsv}")
 
-        # Histogram (viridis gradient)
+        # Histogram
         fig_hist = plt.figure(figsize=(6, 4))
         counts, bins = np.histogram(post_df['min_wasserstein'], bins=50)
         norm = plt.Normalize(vmin=counts.min(), vmax=counts.max())
@@ -361,6 +355,7 @@ def evaluate(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -370,6 +365,7 @@ def evaluate(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(y=baseline_precision_filt, xmin=0, xmax=1,
@@ -382,6 +378,7 @@ def evaluate(model_uri: str,
             ax[1, 0].set_ylim(0, 1)
             ax[1, 0].legend(loc="lower left")
 
+            # metrics box
             metrics_text = (
                 f"Traces remaining: {total_filtered}\n"
                 f"PR8: {pr8_filtered}\n"
@@ -506,6 +503,7 @@ def evaluate(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_th})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -515,6 +513,7 @@ def evaluate(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(y=baseline_precision_filt, xmin=0, xmax=1,
@@ -527,6 +526,7 @@ def evaluate(model_uri: str,
             ax[1, 0].set_ylim(0, 1)
             ax[1, 0].legend(loc="lower left")
 
+            # metrics box
             metrics_text = (
                 f"Traces remaining: {total_filtered}\n"
                 f"PR8: {pr8_filtered}\n"
@@ -544,6 +544,7 @@ def evaluate(model_uri: str,
             savefig(fig_loop, f"eval_filtered_CTgt_{ct_th:g}")
             plt.show()
 
+            # Printed evaluation report
             print("\n================ Filtered Evaluation Report ================\n")
             print(f"CT threshold: {ct_threshold}")
             print(f"Traces remaining: {total_filtered}")
@@ -565,17 +566,12 @@ def test(model_uri: str,
          spaced_threshold: bool = True,
          ) -> None:
     """
-    Evaluate a trained model on a held-out test dataset (xxx_test.tsv).
+    Evaluate a trained model on a held-out test dataset (*_test.tsv).
     """
-
-    # -------------------
     # Load model
-    # -------------------
     model = mlflow.keras.load_model(model_uri)
 
-    # -------------------
     # Load test dataset
-    # -------------------
     dataset_path = Path(dataset)
     if not dataset_path.exists():
         candidate = repo_dir / 'data' / dataset_path.name
@@ -593,7 +589,7 @@ def test(model_uri: str,
     else:
         y_test = LabelEncoder().fit_transform(labels)
 
-    # --- saving helper (same pattern as evaluate) ---
+    # saving helper for outputs
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{Path(model_uri).stem}_{dataset_path.stem}"
@@ -607,9 +603,7 @@ def test(model_uri: str,
         fig.savefig(path, dpi=300, bbox_inches="tight")
         print(f"[saved] {path}")
 
-    # -------------------
-    # Monte Carlo predictions (optional)
-    # -------------------
+    # Monte Carlo predictions
     if include_uncertainty:
         print("Running Monte Carlo prediction...")
         y_pred_prob, probs_try = monte_carlo_predict_samples(
@@ -624,9 +618,7 @@ def test(model_uri: str,
     y_pred_prob = y_pred_prob.flatten()
     y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
-    # -------------------
     # Standard evaluation metrics
-    # -------------------
     acc = accuracy_score(y_test, y_pred_bin)
     mcc = matthews_corrcoef(y_test, y_pred_bin)
 
@@ -643,9 +635,7 @@ def test(model_uri: str,
     pr8_traces = np.sum(y_test == 1)
     x31_traces = np.sum(y_test == 0)
 
-    # -------------------
     # Evaluation plots
-    # -------------------
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
     disp = ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred_bin, ax=ax[0, 0], cmap="viridis",
@@ -658,7 +648,7 @@ def test(model_uri: str,
         cbar.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
-    # ROC
+    # ROC curve
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -668,7 +658,7 @@ def test(model_uri: str,
     ax[0, 1].set_ylim(0, 1)
     ax[0, 1].legend(loc="lower right")
 
-    # PR
+    # PR curve
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
     ax[1, 0].hlines(y=baseline_precision, xmin=0, xmax=1,
                     colors="gray", linestyles="--",
@@ -699,6 +689,7 @@ def test(model_uri: str,
     plt.show()
     plt.close(fig)
 
+    # Printed evaluation report
     print("\n================ Test Evaluation Report ================\n")
     print(f"Accuracy: {acc:.4f}")
     print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
@@ -707,9 +698,7 @@ def test(model_uri: str,
     print(f"ROC-AUC: {auc_score:.4f}")
     print(f"Average Precision (PR-AUC): {ap_score:.4f}")
 
-    # -------------------
     # Post-analysis with CT (Wasserstein distance)
-    # -------------------
     if use_post_analysis and include_uncertainty:
         print("\n================ Post-analysis ================\n")
 
@@ -731,7 +720,7 @@ def test(model_uri: str,
             )
             list_min_w_distances.append(min_w)
 
-        # --- Post-analysis table ---
+        # Post-analysis table
         idx_to_name = {0: "X31", 1: "PR8"}
         target_names = ["X31", "PR8"]  # keep for plots/metrics order
 
@@ -750,7 +739,7 @@ def test(model_uri: str,
         post_df.to_csv(post_tsv, sep="\t", index=False)
         print(f"[saved] {post_tsv}")
 
-        # Histogram (viridis gradient)
+        # Histogram
         fig_hist = plt.figure(figsize=(6, 4))
         counts, bins = np.histogram(post_df['min_wasserstein'], bins=50)
         norm = plt.Normalize(vmin=counts.min(), vmax=counts.max())
@@ -800,6 +789,7 @@ def test(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -809,6 +799,7 @@ def test(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(y=baseline_precision_filt, xmin=0, xmax=1,
@@ -948,6 +939,7 @@ def test(model_uri: str,
                 cbar_filt.set_ticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_th})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_filt, tpr_filt, label=f"AUC = {auc_filt:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -957,6 +949,7 @@ def test(model_uri: str,
             ax[0, 1].set_ylim(0, 1)
             ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             ax[1, 0].plot(recall_filt, precision_filt, label=f"AP = {ap_filt:.4f}")
             baseline_precision_filt = np.mean(y_true_filt)
             ax[1, 0].hlines(y=baseline_precision_filt, xmin=0, xmax=1,
@@ -987,6 +980,7 @@ def test(model_uri: str,
             plt.show()
             plt.close(fig_loop)
 
+            # Printed evaluation report
             print("\n================ Filtered Test Report ================\n")
             print(f"CT threshold: {ct_th}")
             print(f"Traces remaining: {total_filtered}")
@@ -1006,27 +1000,12 @@ def predict_labeled(model_uri: str,
     """
     Predict on a labeled dataset formatted as:
     label, video, trace, time_0, time_10, ..., time_600
-
-    Saves a standardized TSV where class mapping is enforced:
-      y_true=1 -> PR8, y_true=0 -> X31
-      predicted_label=1 -> PR8, predicted_label=0 -> X31
-    Also saves a 2x2 evaluation plot.
-
-    Args:
-        model_uri (str): Path or URI to the trained model (MLflow or .keras)
-        dataset (Path): Path to labeled dataset (TSV)
-        threshold (float): Probability cutoff for binary classification (default=0.5)
     """
-
-    # -------------------
     # Load model
-    # -------------------
     print(f"Loading model from: {model_uri}")
     model = mlflow.keras.load_model(model_uri)
 
-    # -------------------
     # Load data
-    # -------------------
     dataset_path = Path(dataset)
     if not dataset_path.exists():
         candidate = repo_dir / 'data' / dataset_path.name
@@ -1053,9 +1032,7 @@ def predict_labeled(model_uri: str,
     # Numeric features (from 4th column onward)
     x_data = data.iloc[:, 3:].values[:, :, np.newaxis]
 
-    # -------------------
-    # Enforce PR8/X31 schema (1=PR8, 0=X31)
-    # -------------------
+    # PR8/X31 schema (1=PR8, 0=X31)
     unique_labels = set(labels.unique())
     if not unique_labels.issubset({"PR8", "X31"}):
         raise ValueError(
@@ -1069,16 +1046,12 @@ def predict_labeled(model_uri: str,
     target_names = ["X31", "PR8"]  # order used for plots and display
     idx_to_name = {0: "X31", 1: "PR8"}
 
-    # -------------------
     # Run predictions
-    # -------------------
     print("Running predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
 
-    # -------------------
     # Compute metrics
-    # -------------------
     acc = accuracy_score(y_true, y_pred_bin)
     mcc = matthews_corrcoef(y_true, y_pred_bin)
     auc_score = roc_auc_score(y_true, y_pred_prob)
@@ -1086,9 +1059,7 @@ def predict_labeled(model_uri: str,
     class_report = classification_report(y_true, y_pred_bin, target_names=target_names)
     cm = confusion_matrix(y_true, y_pred_bin)
 
-    # -------------------
     # Print results
-    # -------------------
     print("\n================ Prediction Evaluation ================\n")
     print(f"Accuracy: {acc:.4f}")
     print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
@@ -1098,9 +1069,7 @@ def predict_labeled(model_uri: str,
     print(class_report)
     print("Confusion Matrix:\n", cm)
 
-    # -------------------
     # Prepare output paths (TSV + Plot)
-    # -------------------
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{Path(model_uri).stem}_{dataset_path.stem}_thr{threshold:g}"
@@ -1108,9 +1077,7 @@ def predict_labeled(model_uri: str,
     preds_path = output_dir / f"{base_tag}_predictions.tsv"
     plot_path  = output_dir / f"{base_tag}_prediction_report.png"
 
-    # -------------------
-    # Save predictions TSV (standardized schema)
-    # -------------------
+    # Save predictions TSV
     pred_df = pd.DataFrame({
         # original identifiers
         "label_true_name": labels,                 # original label text from file
@@ -1127,9 +1094,7 @@ def predict_labeled(model_uri: str,
     pred_df.to_csv(preds_path, sep="\t", index=False)
     print(f"\nPredictions saved to: {preds_path}")
 
-    # -------------------
-    # Visualization (2×2 with metrics panel)
-    # -------------------
+    # Visualization
     total_traces = len(y_true)
     counts_per_class = "\n".join(
         f"{name}: {int(np.sum(y_true == i))}" for i, name in enumerate(target_names)
@@ -1137,7 +1102,7 @@ def predict_labeled(model_uri: str,
 
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
 
-    # Confusion Matrix (normalized) with viridis
+    # Confusion Matrix
     disp = ConfusionMatrixDisplay.from_predictions(
         y_true, y_pred_bin, ax=ax[0, 0], cmap="viridis",
         colorbar=True, display_labels=target_names, normalize="true"
@@ -1162,7 +1127,7 @@ def predict_labeled(model_uri: str,
     ax[0, 1].set_ylim(0, 1)
     ax[0, 1].legend(loc="lower right")
 
-    # Precision–Recall Curve
+    # PR Curve
     precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
     baseline = np.mean(y_true)
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
@@ -1204,21 +1169,12 @@ def predict_unlabeled(model_uri: str,
     """
     Predict on an unlabeled dataset formatted as:
     trace, time_0, time_10, ..., time_600
-
-    - Saves predictions TSV and histogram PNG to IAV_output/
-    - Histogram uses viridis colormap with no borders
-    - Pred label mapping: 1=PR8, 0=X31
     """
-
-    # -------------------
     # Load model
-    # -------------------
     print(f"Loading model from: {model_uri}")
     model = mlflow.keras.load_model(model_uri)
 
-    # -------------------
     # Load data
-    # -------------------
     dataset_path = Path(data_tsv)
     if not dataset_path.exists():
         candidate = repo_dir / 'data' / dataset_path.name
@@ -1243,9 +1199,7 @@ def predict_unlabeled(model_uri: str,
         raise ValueError("No timepoint columns found after 'trace'.")
     x_data = data.loc[:, feature_cols].values[:, :, np.newaxis]
 
-    # -------------------
     # Run predictions
-    # -------------------
     print("Running model predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
@@ -1254,9 +1208,7 @@ def predict_unlabeled(model_uri: str,
     idx_to_name = {0: "X31", 1: "PR8"}
     predicted_classname = np.vectorize(idx_to_name.get)(y_pred_bin)
 
-    # -------------------
     # Output paths
-    # -------------------
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{Path(model_uri).stem}_{dataset_path.stem}_thr{threshold:g}"
@@ -1264,9 +1216,7 @@ def predict_unlabeled(model_uri: str,
     preds_path = output_dir / f"{base_tag}_unlabeled_predictions.tsv"
     plot_path  = output_dir / f"{base_tag}_unlabeled_hist.png"
 
-    # -------------------
     # Save predictions TSV (unlabeled → no true labels/videos)
-    # -------------------
     pred_df = pd.DataFrame({
         "trace": traces,
         "y_pred_prob": y_pred_prob,
@@ -1311,22 +1261,10 @@ def predict_labeled_model(
 ) -> None:
     """
     Predict on a labeled dataset formatted as:
-    label, video, trace, time_0, time_10, ..., time_600
-
-    Saves a standardized TSV where class mapping is enforced:
-      y_true=1 -> PR8, y_true=0 -> X31
-      predicted_label=1 -> PR8, predicted_label=0 -> X31
-    Also saves a 2x2 evaluation plot.
-
-    Args:
-        model_path (Path): Path to the trained Keras model (.keras file or SavedModel folder)
-        dataset (Path): Path to labeled dataset (TSV)
-        threshold (float): Probability cutoff for binary classification (default=0.5)
+    label, video, trace, time_0, time_10, ..., time_600.
+    Uses a provided model.
     """
-
-    # -------------------
     # Load model
-    # -------------------
     mp = Path(model_path)
     if not mp.exists():
         candidate = repo_dir / "models" / mp.name
@@ -1341,9 +1279,7 @@ def predict_labeled_model(
     except Exception as e:
         raise RuntimeError(f"Failed to load Keras model from {mp}: {e}")
 
-    # -------------------
     # Load data
-    # -------------------
     dataset_path = Path(dataset)
     if not dataset_path.exists():
         candidate = repo_dir / "data" / dataset_path.name
@@ -1369,9 +1305,7 @@ def predict_labeled_model(
     # Numeric features (from 4th column onward)
     x_raw = data.iloc[:, 3:].to_numpy(dtype="float32")
 
-    # -------------------
     # Adjust for expected input length
-    # -------------------
     expected_len = model.input_shape[1] if len(model.input_shape) > 1 else x_raw.shape[1]
     current_len = x_raw.shape[1]
     if current_len > expected_len:
@@ -1385,9 +1319,7 @@ def predict_labeled_model(
 
     x_data = x_raw[:, :, np.newaxis]
 
-    # -------------------
     # Enforce PR8/X31 schema
-    # -------------------
     unique_labels = set(labels.unique())
     if not unique_labels.issubset({"PR8", "X31"}):
         raise ValueError(
@@ -1400,16 +1332,12 @@ def predict_labeled_model(
     target_names = ["X31", "PR8"]
     idx_to_name = {0: "X31", 1: "PR8"}
 
-    # -------------------
     # Run predictions
-    # -------------------
     print("Running predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
 
-    # -------------------
     # Compute metrics
-    # -------------------
     acc = accuracy_score(y_true, y_pred_bin)
     mcc = matthews_corrcoef(y_true, y_pred_bin)
     auc_score = roc_auc_score(y_true, y_pred_prob)
@@ -1417,9 +1345,7 @@ def predict_labeled_model(
     class_report = classification_report(y_true, y_pred_bin, target_names=target_names)
     cm = confusion_matrix(y_true, y_pred_bin)
 
-    # -------------------
     # Print results
-    # -------------------
     print("\n================ Prediction Evaluation ================\n")
     print(f"Accuracy: {acc:.4f}")
     print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
@@ -1429,9 +1355,7 @@ def predict_labeled_model(
     print(class_report)
     print("Confusion Matrix:\n", cm)
 
-    # -------------------
     # Prepare output paths
-    # -------------------
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{mp.stem}_{dataset_path.stem}_thr{threshold:g}"
@@ -1439,9 +1363,7 @@ def predict_labeled_model(
     preds_path = output_dir / f"{base_tag}_predictions_model.tsv"
     plot_path  = output_dir / f"{base_tag}_prediction_report_model.png"
 
-    # -------------------
     # Save predictions TSV
-    # -------------------
     pred_df = pd.DataFrame({
         "label_true_name": labels,
         "video": videos,
@@ -1455,9 +1377,7 @@ def predict_labeled_model(
     pred_df.to_csv(preds_path, sep="\t", index=False)
     print(f"\nPredictions saved to: {preds_path}")
 
-    # -------------------
     # Visualization
-    # -------------------
     total_traces = len(y_true)
     counts_per_class = "\n".join(
         f"{name}: {int(np.sum(y_true == i))}" for i, name in enumerate(target_names)
@@ -1479,14 +1399,14 @@ def predict_labeled_model(
         pass
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
-    # ROC
+    # ROC curve
     fpr, tpr, _ = roc_curve(y_true, y_pred_prob)
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14)
     ax[0, 1].legend(loc="lower right")
 
-    # PR
+    # PR curve
     precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
     baseline = np.mean(y_true)
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
@@ -1523,16 +1443,10 @@ def predict_unlabeled_model(
 ) -> None:
     """
     Predict on an unlabeled dataset formatted as:
-    trace, time_0, time_10, ..., time_600
-
-    - Saves predictions TSV and histogram PNG to IAV_output/
-    - Histogram uses viridis colormap with no borders
-    - Pred label mapping: 1=PR8, 0=X31
+    trace, time_0, time_10, ..., time_600.
+    Uses a provided model
     """
-
-    # -------------------
     # Resolve model path
-    # -------------------
     mp = Path(model_path)
     if not mp.exists():
         # Try resolving relative to repo_dir/models
@@ -1549,9 +1463,7 @@ def predict_unlabeled_model(
     except Exception as e:
         raise RuntimeError(f"Failed to load Keras model from {mp}: {e}")
 
-    # -------------------
     # Load data
-    # -------------------
     dataset_path = Path(data_tsv)
     if not dataset_path.exists():
         candidate = repo_dir / 'data' / dataset_path.name
@@ -1578,9 +1490,7 @@ def predict_unlabeled_model(
     # Shape: (N, T, 1) — add channel dim for 1D convs/RNNs expecting features_last
     x_data = data.loc[:, feature_cols].values[:, :, np.newaxis].astype("float32")
 
-    # -------------------
     # Run predictions
-    # -------------------
     print("Running model predictions...")
     y_pred_prob = model.predict(x_data).astype("float32").flatten()
     y_pred_bin = (y_pred_prob > threshold).astype(int)
@@ -1589,9 +1499,7 @@ def predict_unlabeled_model(
     idx_to_name = {0: "X31", 1: "PR8"}
     predicted_classname = np.vectorize(idx_to_name.get)(y_pred_bin)
 
-    # -------------------
     # Output paths
-    # -------------------
     output_dir = repo_dir / "IAV_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{mp.stem}_{dataset_path.stem}_thr{threshold:g}"
@@ -1599,9 +1507,7 @@ def predict_unlabeled_model(
     preds_path = output_dir / f"{base_tag}_unlabeled_predictions_model.tsv"
     plot_path  = output_dir / f"{base_tag}_unlabeled_hist_model.png"
 
-    # -------------------
     # Save predictions TSV (unlabeled → no true labels/videos)
-    # -------------------
     pred_df = pd.DataFrame({
         "trace": traces,
         "y_pred_prob": y_pred_prob,

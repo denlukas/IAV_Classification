@@ -1,20 +1,16 @@
 import concurrent.futures
 import multiprocessing as mp
-from functools import partial
-
+import typer
 import sys
-import numpy as np
-import seaborn as sns
-
 import mlflow
-from mlflow.entities import RunInfo
 
+from mlflow.entities import RunInfo
+from functools import partial
 from blinkognition.data import load_dataset_split
 from blinkognition.ml import fit
 from blinkognition.model import make_model
 from blinkognition.utils import set_seeds
 
-import typer
 
 app = typer.Typer()
 
@@ -143,5 +139,3 @@ def cross_validate(
                     print(f'Fold {fold} finished')
         except KeyboardInterrupt:
             executor.shutdown(wait=True, cancel_futures=True)
-
-    # evaluate

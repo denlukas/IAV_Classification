@@ -1,6 +1,5 @@
 import mlflow
 import typer
-from typing import Optional
 
 from blinkognition.data import app as data_app
 from blinkognition.ml import app as ml_app

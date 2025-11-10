@@ -1,27 +1,21 @@
-from pathlib import Path
-
 import mlflow
 import keras
-
 import pandas as pd
 import numpy as np
-from matplotlib.colors import Normalize
+import typer
+import matplotlib.pyplot as plt
 
+from matplotlib.colors import Normalize
+from pathlib import Path
 from blinkognition.utils import repo_dir, set_seeds
-from blinkognition.mcc import MatthewsCorrelationCoefficient
 from blinkognition.data import DataSplit, load_dataset_split
 from blinkognition.model import make_model, monte_carlo_predict_samples
-
-import typer
-
 from sklearn.metrics import (
     roc_curve, roc_auc_score,
     precision_recall_curve, average_precision_score,
     ConfusionMatrixDisplay, classification_report, accuracy_score,
     confusion_matrix, matthews_corrcoef
 )
-
-import matplotlib.pyplot as plt
 from scipy.stats import wasserstein_distance
 
 app = typer.Typer()
@@ -128,7 +122,7 @@ def evaluate(model_uri: str,
     datasplit = load_dataset_split(dataset, seed=seed)
     datasplit.x_test = datasplit.x_test[..., np.newaxis]
 
-    # --- saving helper (blinkognition_output + consistent names) ---
+    # saving helper for output files
     output_dir = repo_dir / "blinkognition_output"
     output_dir.mkdir(parents=True, exist_ok=True)
     base_tag = f"{Path(model_uri).stem}_{Path(dataset).stem}_seed{seed}"
@@ -157,7 +151,7 @@ def evaluate(model_uri: str,
     y_pred_prob = y_pred_prob.flatten()
     y_pred_bin = (y_pred_prob > 0.5).astype(int)
 
-    # --- map ground truth and predictions to E1/E2 ---
+    # map ground truth and predictions to E1/E2
     y_true_str = pd.Series(datasplit.y_test).map(class_labels).values
     y_pred_str = pd.Series(y_pred_bin).map(class_labels).values
 
@@ -173,7 +167,7 @@ def evaluate(model_uri: str,
     classes = ["E1", "E2"]
     total_traces = len(y_true_str)
 
-    # ===== Plot 1: evaluation (2x2) =====
+    # Evaluation report
     fig, ax = plt.subplots(2, 2, figsize=(10, 8))
     ConfusionMatrixDisplay.from_predictions(
         y_true_str, y_pred_str, display_labels=classes, ax=ax[0, 0],
@@ -183,7 +177,7 @@ def evaluate(model_uri: str,
     im.set_norm(Normalize(vmin=0, vmax=1))
     ax[0, 0].set_title("Confusion Matrix", fontsize=14, pad=15)
 
-    # ROC
+    # ROC curve
     ax[0, 1].plot(fpr, tpr, label=f"AUC = {auc_score:.4f}")
     ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
     ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
@@ -191,7 +185,7 @@ def evaluate(model_uri: str,
     ax[0, 1].set_xlim(0, 1); ax[0, 1].set_ylim(0, 1); ax[0, 1].margins(x=0, y=0)
     ax[0, 1].legend(loc="lower right")
 
-    # PR
+    # PR curve
     baseline_precision = np.mean(datasplit.y_test)
     ax[1, 0].plot(recall, precision, label=f"AP = {ap_score:.4f}")
     ax[1, 0].hlines(y=baseline_precision, xmin=0, xmax=1, colors="gray", linestyles="--",
@@ -217,6 +211,7 @@ def evaluate(model_uri: str,
     plt.show()
     plt.close(fig)
 
+    # Print results
     print("\n================ Evaluation Report ================\n")
     print(f"Accuracy: {acc:.4f}")
     print(f"Matthews Correlation Coefficient (MCC): {mcc:.4f}")
@@ -225,9 +220,7 @@ def evaluate(model_uri: str,
     print(f"\nROC-AUC: {auc_score:.4f}")
     print(f"Average Precision (PR-AUC): {ap_score:.4f}")
 
-    # -------------------
     # Post-analysis with CT (Wasserstein distance)
-    # -------------------
     if use_post_analysis and include_uncertainty:
         print("\n================ Post-analysis ================\n")
 
@@ -254,12 +247,12 @@ def evaluate(model_uri: str,
             "min_wasserstein": list_min_w_distances
         })
 
-        # --- save TSV with full post-analysis table ---
+        # save TSV with full post-analysis table
         post_csv = output_dir / f"{base_tag}_post_analysis.tsv"
         post_df.to_csv(post_csv, sep="\t", index=False)
         print(f"[saved] {post_csv}")
 
-        # ===== Plot 2: histogram (viridis gradient) =====
+        # Histogram
         fig_hist = plt.figure(figsize=(6, 4))
         counts, bins = np.histogram(post_df['min_wasserstein'], bins=50)
         norm = plt.Normalize(vmin=counts.min() if counts.size else 0,
@@ -277,7 +270,7 @@ def evaluate(model_uri: str,
         plt.show()
         plt.close(fig_hist)
 
-        # ===== Plot 3: single-cut filtered eval (CT > ct_threshold) =====
+        # Single-cut filtered eval (CT > ct_threshold)
         mask_ct = post_df['min_wasserstein'] > ct_threshold
         filtered_df = post_df[mask_ct]
         if len(filtered_df) > 0:
@@ -301,6 +294,7 @@ def evaluate(model_uri: str,
             im_f = ax[0, 0].images[-1]; im_f.set_norm(Normalize(vmin=0, vmax=1))
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_threshold})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_f, tpr_f, label=f"AUC = {auc_f:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve (Filtered CT)", fontsize=14, pad=15)
@@ -308,6 +302,7 @@ def evaluate(model_uri: str,
             ax[0, 1].set_xlim(0, 1); ax[0, 1].set_ylim(0, 1); ax[0, 1].margins(x=0, y=0)
             ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             baseline_precision_f = np.mean(y_true_filt == "E2")
             ax[1, 0].plot(recall_f, precision_f, label=f"AP = {ap_f:.4f}")
             ax[1, 0].hlines(y=baseline_precision_f, xmin=0, xmax=1, colors="gray", linestyles="--",
@@ -317,6 +312,7 @@ def evaluate(model_uri: str,
             ax[1, 0].set_xlim(0, 1); ax[1, 0].set_ylim(0, 1); ax[1, 0].margins(x=0, y=0)
             ax[1, 0].legend(loc="lower left")
 
+            # metrics box
             counts_f = {c: np.sum(y_true_filt == c) for c in classes}
             metrics_text_f = (
                 f"Traces remaining: {len(y_true_filt)} / {len(post_df)}\n"
@@ -334,7 +330,7 @@ def evaluate(model_uri: str,
             plt.show()
             plt.close(fig_filt)
 
-        # ===== Plot 4: ECDF =====
+        # ECDF
         fig_ecdf, ax = plt.subplots(figsize=(6, 5))
         x_min, x_max = post_df["min_wasserstein"].min(), post_df["min_wasserstein"].max()
         cmap = plt.get_cmap("tab10")
@@ -352,7 +348,7 @@ def evaluate(model_uri: str,
         plt.show()
         plt.close(fig_ecdf)
 
-        # ===== Plot 5: class fractions vs CT thresholds =====
+        # Class fractions vs CT thresholds
         max_w = post_df["min_wasserstein"].max()
         ct_thresholds_all = (np.linspace(0, max_w, num=6)[:-1] if spaced_threshold else [ct_threshold])
         ct_thresholds_all = np.round(ct_thresholds_all, 3)
@@ -381,7 +377,7 @@ def evaluate(model_uri: str,
         plt.show()
         plt.close(fig_bar)
 
-        # ===== Plots 6–8: filtered reports for three spaced thresholds =====
+        # Filtered reports for three spaced thresholds
         if spaced_threshold:
             internal = np.linspace(post_df["min_wasserstein"].min(),
                                    post_df["min_wasserstein"].max(), num=6)[1:-1]
@@ -415,12 +411,14 @@ def evaluate(model_uri: str,
             im_f = ax[0, 0].images[-1]; im_f.set_norm(Normalize(vmin=0, vmax=1))
             ax[0, 0].set_title(f"Confusion Matrix (CT>{ct_th})", fontsize=14, pad=15)
 
+            # ROC curve
             ax[0, 1].plot(fpr_f, tpr_f, label=f"AUC = {auc_f:.4f}")
             ax[0, 1].plot([0, 1], [0, 1], linestyle="--", color="gray")
             ax[0, 1].set_title("ROC Curve", fontsize=14, pad=15)
             ax[0, 1].set_xlabel("False Positive Rate"); ax[0, 1].set_ylabel("True Positive Rate")
             ax[0, 1].set_xlim(0, 1); ax[0, 1].set_ylim(0, 1); ax[0, 1].legend(loc="lower right")
 
+            # PR curve
             baseline_precision_f = np.mean(y_true_filt == "E2")
             ax[1, 0].plot(recall_f, precision_f, label=f"AP = {ap_f:.4f}")
             ax[1, 0].hlines(y=baseline_precision_f, xmin=0, xmax=1, colors="gray", linestyles="--",
@@ -429,6 +427,7 @@ def evaluate(model_uri: str,
             ax[1, 0].set_xlabel("Recall"); ax[1, 0].set_ylabel("Precision")
             ax[1, 0].set_xlim(0, 1); ax[1, 0].set_ylim(0, 1); ax[1, 0].legend(loc="lower left")
 
+            # metrics box
             counts_f = {c: np.sum(y_true_filt == c) for c in classes}
             metrics_text_f = (
                 f"Traces remaining: {len(y_true_filt)} / {len(post_df)}\n"
@@ -446,6 +445,7 @@ def evaluate(model_uri: str,
             plt.show()
             plt.close(fig_loop)
 
+            # Print results
             print("\n====== Post-analysis Filtered Evaluation ======")
             print(f"CT threshold: {ct_th}")
             print(f"Traces remaining: {len(y_true_filt)} / {len(datasplit.y_test)}")

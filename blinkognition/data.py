@@ -1,15 +1,13 @@
-import warnings
-from dataclasses import dataclass
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
+import typer
+
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-
+from dataclasses import dataclass
+from pathlib import Path
 from blinkognition.utils import repo_dir
 
-import typer
 app = typer.Typer()
 
 
@@ -38,25 +36,25 @@ def create_test_set(
     create a reproducible train/test split and optionally augment training data.
     Augmented traces (with '_m' in trace_ID) are excluded from test/validation.
     """
-    # --- Load dataset ---
+    # Load dataset
     data = pd.read_csv(data_dir / filename, sep='\t').set_index(['label', 'trace_ID'])
 
-    # --- Separate augmented vs non-augmented traces ---
+    # Separate augmented vs non-augmented traces
     mask_aug = data.index.get_level_values("trace_ID").str.contains("_m")
     data_aug = data[mask_aug]
     data_clean = data[~mask_aug]
 
-    # --- Prepare labels ---
+    # Prepare labels
     labels = data_clean.index.get_level_values('label')
     y = LabelEncoder().fit_transform(labels)
 
-    # --- Compute class weights ---
+    # Compute class weights
     class_counts = np.bincount(y)
     weights = np.ones_like(y, dtype=float)
     for cls, count in enumerate(class_counts):
         weights[y == cls] = len(y) / (len(class_counts) * count)
 
-    # --- Stratified train/test split (only on clean traces) ---
+    # Stratified train/test split (only on clean traces)
     X_train, X_test, y_train, y_test, idx_train, idx_test, w_train, w_test = train_test_split(
         data_clean.values, y, data_clean.index, weights,
         test_size=test_size,
@@ -64,7 +62,7 @@ def create_test_set(
         random_state=seed
     )
 
-    # --- Add augmented traces back into training set ---
+    # Add augmented traces back into training set
     X_train = np.vstack([X_train, data_aug.values])
     idx_train = idx_train.append(data_aug.index)
 
@@ -87,7 +85,7 @@ def create_test_set(
     train_final = train_df
     test_set = pd.DataFrame(X_test, columns=data.columns, index=idx_test)
 
-    # --- Optional augmentation ---
+    # Optional augmentation
     if augment:
         from tsaug import TimeWarp, Drift, AddNoise
 
@@ -109,11 +107,11 @@ def create_test_set(
         print(f"Augmented samples added: {len(augmented_df)}")
         print(f"Final train set size: {len(train_final)}")
 
-    # --- Save TSV files ---
+    # Save TSV files
     train_final.to_csv(data_dir / (filename.replace('.tsv', '_train_val.tsv')), sep='\t', header=True)
     test_set.to_csv(data_dir / (filename.replace('.tsv', '_test.tsv')), sep='\t', header=True)
 
-    # --- Print summary ---
+    # Print summary
     def print_summary(name: str, df: pd.DataFrame):
         print(f"\n{name} set summary:")
         print(f"  Total traces: {len(df)}")
@@ -138,28 +136,28 @@ def load_dataset_split(
     Augmented traces (with '_m' in trace_ID) are excluded from test/validation.
     """
 
-    # --- Load dataset ---
+    # Load dataset
     data = pd.read_csv(data_dir / filename,
                        sep='\t').set_index(['label', 'trace_ID'])
     print(f"Dataset loaded: {data.shape[0]} traces, {data.shape[1]} timepoints")
 
-    # --- Separate augmented vs non-augmented traces ---
+    # Separate augmented vs non-augmented traces
     mask_aug = data.index.get_level_values("trace_ID").str.contains("_m")
     data_aug = data[mask_aug]
     data_clean = data[~mask_aug]
 
-    # --- Prepare labels ---
+    # Prepare labels
     labels = data_clean.index.get_level_values('label')
     y = LabelEncoder().fit_transform(labels)
     X = data_clean.values
 
-    # --- Compute class weights ---
+    # Compute class weights
     class_counts = np.bincount(y)
     weights = np.ones_like(y, dtype=float)
     for cls, count in enumerate(class_counts):
         weights[y == cls] = len(y) / (len(class_counts) * count)
 
-    # --- Stratified train/test split (only on clean traces) ---
+    # Stratified train/test split (only on clean traces)
     X_train, X_test, y_train, y_test, idx_train, idx_test, w_train, w_test = train_test_split(
         X, y, data_clean.index, weights,
         test_size=test_size,
@@ -167,7 +165,7 @@ def load_dataset_split(
         random_state=seed
     )
 
-    # --- Add augmented traces back into training set ---
+    # Add augmented traces back into training set
     X_train = np.vstack([X_train, data_aug.values])
     idx_train = idx_train.append(data_aug.index)
 
@@ -186,7 +184,7 @@ def load_dataset_split(
     w_train = train_df.pop('w').to_numpy()
     train_df.set_index(['label', 'trace_ID'], inplace=True)
 
-    # --- Construct DataSplit object ---
+    # Construct DataSplit object
     split = DataSplit(
         x_train=train_df.values,
         y_train=y_train,
@@ -199,7 +197,7 @@ def load_dataset_split(
         labels=list(np.unique(labels))
     )
 
-    # --- Print summary ---
+    # Print summary
     def print_summary(name: str, idx: pd.Index):
         print(f"\n{name} set summary:")
         label_counts = pd.Series(idx.get_level_values('label')).value_counts()
