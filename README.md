@@ -14,8 +14,26 @@ The project also reproduces and scales the Blinkognition single-molecule pipelin
 <br>
 
 ## 2. Installation
-Please install [uv](https://docs.astral.sh/uv/getting-started/features/) if you want to use this code.
-It uses [typer](https://typer.tiangolo.com/) as a command line interface and [MLflow](https://mlflow.org/docs/latest/ml/tracking/quickstart/) for tracking the experiments.
+If not already installed, please install [Python](https://www.python.org/downloads/release/python-3120/) (here Version 3.12) and [PyCharm](https://www.jetbrains.com/pycharm/download/other.html) (here 2025.1.3.1). In both cases execute the download-file and select "Add to Path".
+
+Open PyCharm and select "Clone Repository" and paste this link: https://github.com/denlukas/IAV_Classification, then click on "Clone". If Git is not installed, click on “Download and Install”
+
+Execute the following four commands one after another in the PyCharm terminal:
+```bash
+python.exe -m pip install --upgrade pip
+# Install uv
+pip install uv
+# install the dependencies
+uv sync
+# activate envirmonment
+.\.venv\Scripts\Activate.ps1
+```
+Select the Python Interpreter: Click on the Python version at the bottom right and click on “Add new Interpreter”, then click on "Add local Interpreter" and choose "Generate new". Lastly, select "uv" as "Type:".  
+A text like “Environment at “venv.” already exisits” might appear, click on “Override existing environment”.  
+There might be a pop up: “Jupyter environment changed”. Click on “Terminate”.
+
+If PyCharm and Python are already installed do this:  
+Please install [uv](https://docs.astral.sh/uv/getting-started/features/).
 ```bash
 # clone the Git Repository
 git clone https://github.com/denlukas/IAV_Classification.git
@@ -26,6 +44,7 @@ uv sync
 #activate the environment
 source .\.venv\Scripts\Activate.ps1
 ```  
+The software uses [typer](https://typer.tiangolo.com/) as a command line interface.
 <br>
 
 ## 3. Getting started
@@ -39,7 +58,7 @@ Outputs will be created automatically. Each notebook creates an individual outpu
 ### 3.2 How to start MLflow
 ![MLflow.png](images/MLflow.png)
 First, open the terminal on the left side of the menu (1).  
-To start the MLflow server it is advised to open another terminal. For this, just click on the "+" and rename the terminal as u wish (2).  
+To start the [MLflow](https://mlflow.org/docs/latest/ml/tracking/quickstart/) server it is advised to open another terminal. For this, just click on the "+" and rename the terminal as u wish (2).  
 Now you can execute the following command:  
 ```bash
 mlflow server --host 127.0.0.1 --port 8080 --serve-artifacts
